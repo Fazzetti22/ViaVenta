@@ -406,9 +406,32 @@ export class SupervisorService {
       return { success: false, message: 'El PIN de acceso móvil debe tener exactamente 4 dígitos numéricos.' };
     }
 
-    const newId = `vend-${Date.now().toString().slice(-6)}`;
+    let vendedorId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : '33333333-4444-4555-8666-' + Date.now().toString().slice(-12);
+
+    // 1. Guardar en Supabase tabla usuarios
+    try {
+      const { data: dbData, error: dbErr } = await supabase.from('usuarios').insert({
+        tenant_id: payload.tenant_id,
+        email: payload.email.trim().toLowerCase(),
+        pin: payload.pin,
+        rol: 'Vendedor',
+        nombre_completo: payload.nombre_completo.trim(),
+        telefono: payload.telefono.trim(),
+        zona_asignada: payload.zona_asignada || 'SUR-01',
+        activo: true,
+      }).select().single();
+
+      if (!dbErr && dbData && dbData.id_usuario) {
+        vendedorId = dbData.id_usuario;
+      }
+    } catch (err) {
+      console.warn('Fallo inserción vendedor en Supabase:', err);
+    }
+
     const nuevoVendedor: VendedorAuditoria = {
-      id_usuario: newId,
+      id_usuario: vendedorId,
       tenant_id: payload.tenant_id,
       nombre_completo: payload.nombre_completo.trim(),
       email: payload.email.trim().toLowerCase(),
@@ -421,20 +444,6 @@ export class SupervisorService {
       gps_lat: -27.8040 + (Math.random() - 0.5) * 0.02,
       gps_lng: -64.2595 + (Math.random() - 0.5) * 0.02,
     };
-
-    // 1. Guardar en Supabase tabla usuarios con constraint chk_vendedor_pin
-    try {
-      await supabase.from('usuarios').insert({
-        id_usuario: newId,
-        tenant_id: payload.tenant_id,
-        email: nuevoVendedor.email,
-        pin: nuevoVendedor.pin,
-        rol: 'Vendedor',
-        nombre_completo: nuevoVendedor.nombre_completo,
-      });
-    } catch {
-      // noop
-    }
 
     // 2. Guardar en LocalStorage
     try {

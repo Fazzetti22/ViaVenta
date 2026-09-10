@@ -74,9 +74,14 @@ export const LoginPage: React.FC = () => {
   const handleGoogleOAuth = async (emailOverride?: string) => {
     setMensajeError(null);
     setMensajeExito(null);
-    setLoading(true);
 
-    const emailToUse = emailOverride || supervisorEmail.trim().toLowerCase();
+    const emailToUse = (emailOverride || supervisorEmail).trim().toLowerCase();
+    if (!emailToUse) {
+      setMensajeError('Por favor ingresa tu correo electrónico corporativo abajo para continuar.');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const res = await AuthService.processGoogleOAuthCallback(emailToUse);

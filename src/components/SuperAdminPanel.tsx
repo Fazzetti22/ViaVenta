@@ -117,6 +117,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
   const [tenants, setTenants] = useState<TenantWithDetails[]>([]);
   const [nuevoNombreEmpresa, setNuevoNombreEmpresa] = useState('');
   const [nuevoSupervisorEmail, setNuevoSupervisorEmail] = useState('');
+  const [nuevoSupervisorPassword, setNuevoSupervisorPassword] = useState('admin123');
   const [tenantActionMsg, setTenantActionMsg] = useState<string | null>(null);
   const [isCreatingTenant, setIsCreatingTenant] = useState(false);
   const [assigningTenantId, setAssigningTenantId] = useState<string | null>(null);
@@ -231,15 +232,20 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
 
     setIsCreatingTenant(true);
     setTenantActionMsg(null);
-    const res = await tenantService.crearTenant(nuevoNombreEmpresa, nuevoSupervisorEmail);
+    const res = await tenantService.crearTenant(
+      nuevoNombreEmpresa,
+      nuevoSupervisorEmail,
+      nuevoSupervisorPassword
+    );
     setIsCreatingTenant(false);
 
     if (res.success) {
       setNuevoNombreEmpresa('');
       setNuevoSupervisorEmail('');
+      setNuevoSupervisorPassword('admin123');
       setTenantActionMsg(res.message);
       await loadTenants();
-      setTimeout(() => setTenantActionMsg(null), 4000);
+      setTimeout(() => setTenantActionMsg(null), 6000);
     } else {
       setTenantActionMsg(res.message);
     }
@@ -911,7 +917,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
                 </p>
               </div>
 
-              <form onSubmit={handleCrearTenant} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+              <form onSubmit={handleCrearTenant} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">
                     Nombre de la Distribuidora
@@ -940,6 +946,20 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
                   />
                 </div>
 
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    Contraseña Inicial del Supervisor
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="admin123"
+                    value={nuevoSupervisorPassword}
+                    onChange={(e) => setNuevoSupervisorPassword(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 font-mono"
+                    required
+                  />
+                </div>
+
                 <button
                   type="submit"
                   disabled={isCreatingTenant}
@@ -959,7 +979,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
                   <span>Distribuidoras Registradas ({tenants.length})</span>
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Control de estado y asignación de cuadrantes por empresa
+                  Control de estado, credenciales de acceso y asignación de cuadrantes por empresa
                 </p>
               </div>
 
@@ -988,6 +1008,10 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                         <span>
                           Supervisor: <strong className="text-slate-800">{t.supervisor_email}</strong>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Clave: <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px] font-semibold">{t.supervisor_password || 'admin123'}</code>
                         </span>
                         <span>•</span>
                         <span className="font-mono text-[11px]">ID: {t.tenant_id}</span>

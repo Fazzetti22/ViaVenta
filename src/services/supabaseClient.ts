@@ -4,10 +4,11 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const DEFAULT_SUPABASE_URL = 'https://lqduggdzxndguikphumq.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_jke41ChyO4_ItAdSqKbvyg_ahHWjJEy';
 
-const rawUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : (typeof process !== 'undefined' ? process.env : {}) as any;
+const rawUrl = (env && env.VITE_SUPABASE_URL) || DEFAULT_SUPABASE_URL;
 // Aseguramos que la URL no termine en /rest/v1 o trailing slash
 const supabaseUrl = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+const supabaseAnonKey = (env && env.VITE_SUPABASE_ANON_KEY) || DEFAULT_SUPABASE_ANON_KEY;
 
 /**
  * Cliente oficial de Supabase.

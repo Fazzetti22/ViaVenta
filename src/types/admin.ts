@@ -64,6 +64,7 @@ export interface GridZoneComputed {
 
 export interface TenantWithDetails extends Empresa {
   supervisor_email?: string;
+  supervisor_password?: string;
   total_zonas?: number;
   total_vendedores?: number;
   zonas_asignadas?: string[];

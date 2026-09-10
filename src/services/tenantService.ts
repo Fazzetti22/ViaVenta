@@ -65,25 +65,36 @@ export class TenantService {
   public async getTenants(): Promise<TenantWithDetails[]> {
     // Intentar leer desde Supabase
     try {
-      const { data, error } = await supabase.from('empresas').select('*');
-      if (!error && data && data.length > 0) {
-        // Enriquecer con zonas locales si existen
+      const { data: empresasData, error: empError } = await supabase.from('empresas').select('*');
+      if (!empError && empresasData && empresasData.length > 0) {
+        // Traer usuarios supervisores para vincularlos con su empresa
+        const { data: usuariosData } = await supabase
+          .from('usuarios')
+          .select('id_usuario, tenant_id, email, nombre_completo, pin, rol')
+          .eq('rol', 'Supervisor');
+
         const localList = this.getLocalTenants();
-        return data.map((d: any) => {
-          const matched = localList.find((l) => l.tenant_id === d.tenant_id);
+
+        return empresasData.map((d: any) => {
+          const tenantId = d.id || d.tenant_id;
+          const supervisor = usuariosData?.find((u: any) => u.tenant_id === tenantId);
+          const matchedLocal = localList.find((l) => l.tenant_id === tenantId || l.nombre_empresa === d.nombre_empresa);
+
           return {
-            tenant_id: d.tenant_id,
+            tenant_id: tenantId,
             nombre_empresa: d.nombre_empresa,
-            activa: d.activa,
-            creado_en: d.creado_en,
-            supervisor_email: matched?.supervisor_email || 'supervisor@empresa.com',
-            total_zonas: matched?.total_zonas || 0,
-            zonas_asignadas: matched?.zonas_asignadas || [],
+            activa: d.activa ?? true,
+            creado_en: d.creado_en || new Date().toISOString(),
+            supervisor_email: supervisor?.email || d.email_contacto || matchedLocal?.supervisor_email || 'supervisor@empresa.com',
+            supervisor_password: supervisor?.pin || matchedLocal?.supervisor_password || 'admin123',
+            total_zonas: matchedLocal?.total_zonas || 0,
+            total_vendedores: matchedLocal?.total_vendedores || 0,
+            zonas_asignadas: matchedLocal?.zonas_asignadas || [],
           };
         });
       }
-    } catch {
-      // noop
+    } catch (err) {
+      console.warn('Fallo consulta Supabase empresas, usando cache local:', err);
     }
 
     return this.getLocalTenants();
@@ -105,13 +116,18 @@ export class TenantService {
     localStorage.setItem(STORAGE_KEY_TENANTS, JSON.stringify(tenants));
   }
 
-  public async crearTenant(nombreEmpresa: string, emailSupervisor: string): Promise<{
+  public async crearTenant(
+    nombreEmpresa: string,
+    emailSupervisor: string,
+    passwordSupervisor?: string
+  ): Promise<{
     success: boolean;
     tenant?: TenantWithDetails;
     message: string;
   }> {
     const cleanNombre = nombreEmpresa.trim();
     const cleanEmail = emailSupervisor.trim().toLowerCase();
+    const cleanPassword = passwordSupervisor?.trim() || 'admin123';
 
     if (!cleanNombre) {
       return { success: false, message: 'El nombre de la empresa es obligatorio.' };
@@ -120,39 +136,71 @@ export class TenantService {
       return { success: false, message: 'Ingrese un correo de supervisor válido.' };
     }
 
-    const newTenantId = `tenant-${Math.random().toString(36).substring(2, 9)}-${Date.now().toString().slice(-4)}`;
+    let tenantUuid = '';
+
+    // 1. Guardar en Supabase empresas (columna id es UUID generado por PostgreSQL)
+    try {
+      const { data: empData, error: empError } = await supabase
+        .from('empresas')
+        .insert({
+          nombre_empresa: cleanNombre,
+          email_contacto: cleanEmail,
+          activa: true,
+        })
+        .select()
+        .single();
+
+      if (empError) {
+        console.error('Error insertando en empresas Supabase:', empError);
+      } else if (empData) {
+        tenantUuid = empData.id;
+      }
+    } catch (err) {
+      console.error('Excepción al crear empresa en Supabase:', err);
+    }
+
+    // Fallback de UUID si offline
+    if (!tenantUuid) {
+      tenantUuid = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : '22222222-3333-4444-8555-' + Date.now().toString().slice(-12);
+    }
+
+    // 2. Crear usuario supervisor en Supabase tabla usuarios
+    try {
+      const { data: usrData, error: usrError } = await supabase
+        .from('usuarios')
+        .insert({
+          tenant_id: tenantUuid,
+          email: cleanEmail,
+          rol: 'Supervisor',
+          nombre_completo: `Supervisor ${cleanNombre}`,
+          pin: cleanPassword,
+          activo: true,
+        })
+        .select()
+        .single();
+
+      if (usrError) {
+        console.error('Error creando usuario supervisor en Supabase:', usrError);
+      }
+    } catch (err) {
+      console.error('Excepción al crear supervisor en Supabase:', err);
+    }
 
     const newTenant: TenantWithDetails = {
-      tenant_id: newTenantId,
+      tenant_id: tenantUuid,
       nombre_empresa: cleanNombre,
       activa: true,
       creado_en: new Date().toISOString(),
       supervisor_email: cleanEmail,
+      supervisor_password: cleanPassword,
       total_zonas: 0,
       total_vendedores: 0,
       zonas_asignadas: [],
     };
 
-    // 1. Guardar en Supabase empresas
-    try {
-      await supabase.from('empresas').insert({
-        tenant_id: newTenant.tenant_id,
-        nombre_empresa: newTenant.nombre_empresa,
-        activa: newTenant.activa,
-      });
-
-      // 2. Crear usuario supervisor en Supabase usuarios
-      await supabase.from('usuarios').insert({
-        tenant_id: newTenant.tenant_id,
-        email: cleanEmail,
-        rol: 'Supervisor',
-        nombre_completo: `Supervisor ${cleanNombre}`,
-      });
-    } catch {
-      // noop
-    }
-
-    // 3. Guardar en LocalStorage
+    // 3. Guardar en LocalStorage para disponibilidad inmediata y soporte offline
     const list = this.getLocalTenants();
     list.unshift(newTenant);
     this.saveLocalTenants(list);
@@ -160,7 +208,7 @@ export class TenantService {
     return {
       success: true,
       tenant: newTenant,
-      message: `Empresa '${cleanNombre}' creada exitosamente con supervisor '${cleanEmail}'.`,
+      message: `Empresa "${cleanNombre}" dada de alta exitosamente. Supervisor "${cleanEmail}" habilitado (Clave: ${cleanPassword}).`,
     };
   }
 
@@ -181,7 +229,8 @@ export class TenantService {
     this.saveLocalTenants(list);
 
     try {
-      await supabase.from('empresas').update({ activa: nextState }).eq('tenant_id', tenantId);
+      // Soportar tanto columna 'id' como 'tenant_id'
+      await supabase.from('empresas').update({ activa: nextState }).eq('id', tenantId);
     } catch {
       // noop
     }
