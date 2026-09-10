@@ -1,0 +1,6 @@
+{
+  "name": "ViaVenta",
+  "description": "Ruteo inteligente y ventas en calle. Plataforma SaaS multi-tenant para preventistas y supervisores comerciales.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

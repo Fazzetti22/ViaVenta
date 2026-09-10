@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background Rounded Canvas -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  
+  <!-- Subtle Outer Ring -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#334155" stroke-width="6" stroke-dasharray="16 12" />
+
+  <!-- Navigation Hexagon Shield / Badge -->
+  <g transform="translate(136, 120)">
+    <!-- Base Route Line -->
+    <path d="M 40,190 Q 120,240 200,160" fill="none" stroke="#2563eb" stroke-width="12" stroke-linecap="round" opacity="0.6"/>
+    <circle cx="40" cy="190" r="12" fill="#10b981" />
+    <circle cx="200" cy="160" r="12" fill="#3b82f6" />
+
+    <!-- Main Location Marker / Arrow Icon -->
+    <path d="M120,20 C75,20 38,57 38,102 C38,155 120,230 120,230 C120,230 202,155 202,102 C202,57 165,20 120,20 Z" fill="url(#blueGrad)" />
+    
+    <!-- Central Cart / Check Icon -->
+    <circle cx="120" cy="98" r="42" fill="#ffffff" />
+    
+    <!-- Dynamic Forward Arrow inside Marker -->
+    <path d="M 108 80 L 136 98 L 108 116 Z" fill="#1d4ed8" />
+  </g>
+</svg>
