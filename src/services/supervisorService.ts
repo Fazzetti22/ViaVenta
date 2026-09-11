@@ -134,7 +134,7 @@ const SEED_VENDEDORES: VendedorAuditoria[] = [
   },
 ];
 
-// Zonas de muestra con nombres comerciales editables
+// Zonas base para estructura operativa
 const SEED_ZONAS: ZonaSupervision[] = [
   {
     id_zona: 'zona-sur-01',
@@ -143,18 +143,7 @@ const SEED_ZONAS: ZonaSupervision[] = [
     nombre_comercial: 'Barrio Belgrano Sur - Ruta A',
     vendedor_id: 'vend-001',
     vendedor_nombre: 'Juan Pérez',
-    total_comercios: 24,
-    comercios_ids: ['com-sur-01', 'com-sur-02', 'com-sur-03', 'com-sur-04', 'com-sur-05', 'com-sur-06'],
-    activa: true,
-  },
-  {
-    id_zona: 'zona-sur-02',
-    tenant_id: '11111111-1111-4111-8111-111111111111',
-    codigo_zona: 'SUR-02',
-    nombre_comercial: 'Av. Solís y Alrededores - Ruta B',
-    vendedor_id: undefined,
-    vendedor_nombre: undefined,
-    total_comercios: 19,
+    total_comercios: 0,
     comercios_ids: [],
     activa: true,
   },
@@ -165,7 +154,7 @@ const SEED_ZONAS: ZonaSupervision[] = [
     nombre_comercial: 'Casco Céntrico Peatonal & Plaza Libertad',
     vendedor_id: 'vend-002',
     vendedor_nombre: 'Mariano Gómez',
-    total_comercios: 28,
+    total_comercios: 0,
     comercios_ids: [],
     activa: true,
   },
@@ -176,128 +165,14 @@ const SEED_ZONAS: ZonaSupervision[] = [
     nombre_comercial: 'Parque Aguirre & Costanera',
     vendedor_id: 'vend-003',
     vendedor_nombre: 'Luciana Herrera',
-    total_comercios: 16,
-    comercios_ids: [],
-    activa: true,
-  },
-  {
-    id_zona: 'zona-este-01',
-    tenant_id: '11111111-1111-4111-8111-111111111111',
-    codigo_zona: 'ESTE-01',
-    nombre_comercial: 'Acceso Puente Carretero - La Banda',
-    vendedor_id: undefined,
-    vendedor_nombre: undefined,
-    total_comercios: 21,
+    total_comercios: 0,
     comercios_ids: [],
     activa: true,
   },
 ];
 
-// Semilla de visitas para la jornada actual (Santiago del Estero)
-const SEED_VISITAS: VisitaAuditoria[] = [
-  {
-    id_visita: 'vis-101',
-    tenant_id: '11111111-1111-4111-8111-111111111111',
-    vendedor_id: 'vend-001',
-    vendedor_nombre: 'Juan Pérez',
-    comercio_id: 'com-sur-01',
-    comercio_nombre: 'Despensa & Kiosco La Esquina',
-    direccion: 'Av. Belgrano Sur 1420',
-    zona: 'SUR-01',
-    estado: 'Venta',
-    hora_visita: '09:45 hs',
-    fecha: new Date().toISOString().split('T')[0],
-    latitud: -27.8010,
-    longitud: -64.2580,
-    monto_total: 18450,
-    forma_pago: 'Efectivo',
-    items: [
-      { nombre: 'Coca Cola Sabor Original 2.25L', cantidad: 3, precio_unitario: 2650, subtotal: 7950 },
-      { nombre: 'Galletitas Chocolinas Bagley 250g', cantidad: 5, precio_unitario: 1350, subtotal: 6750 },
-      { nombre: 'Aceite de Girasol Natura 1.5L', cantidad: 2, precio_unitario: 1875, subtotal: 3750 },
-    ],
-    observaciones: 'Entregar por la mañana antes de las 13 hs',
-  },
-  {
-    id_visita: 'vis-102',
-    tenant_id: '11111111-1111-4111-8111-111111111111',
-    vendedor_id: 'vend-001',
-    vendedor_nombre: 'Juan Pérez',
-    comercio_id: 'com-sur-02',
-    comercio_nombre: 'Minimercado Don Antonio',
-    direccion: 'Calle Alsina 680',
-    zona: 'SUR-01',
-    estado: 'Venta',
-    hora_visita: '10:30 hs',
-    fecha: new Date().toISOString().split('T')[0],
-    latitud: -27.8045,
-    longitud: -64.2605,
-    monto_total: 32600,
-    forma_pago: 'Transferencia',
-    items: [
-      { nombre: 'Yerba Mate Playadito Especial 1Kg', cantidad: 4, precio_unitario: 3950, subtotal: 15800 },
-      { nombre: 'Cerveza Quilmes Clásica 1L Retornable', cantidad: 6, precio_unitario: 1980, subtotal: 11880 },
-      { nombre: 'Alfajor Havanna Mixto (Caja x6)', cantidad: 1, precio_unitario: 4920, subtotal: 4920 },
-    ],
-    observaciones: 'Cliente habitual, solicitó factura A',
-  },
-  {
-    id_visita: 'vis-103',
-    tenant_id: '11111111-1111-4111-8111-111111111111',
-    vendedor_id: 'vend-001',
-    vendedor_nombre: 'Juan Pérez',
-    comercio_id: 'com-sur-03',
-    comercio_nombre: 'Farmacia del Valle',
-    direccion: 'Av. Moreno Sur 910',
-    zona: 'SUR-01',
-    estado: 'Rechazado',
-    motivo_rechazo: 'Tiene stock suficiente de bebidas',
-    hora_visita: '11:15 hs',
-    fecha: new Date().toISOString().split('T')[0],
-    latitud: -27.8070,
-    longitud: -64.2560,
-    monto_total: 0,
-  },
-  {
-    id_visita: 'vis-104',
-    tenant_id: '11111111-1111-4111-8111-111111111111',
-    vendedor_id: 'vend-002',
-    vendedor_nombre: 'Mariano Gómez',
-    comercio_id: 'com-centro-01',
-    comercio_nombre: 'Kiosco Peatonal Central',
-    direccion: 'Peatonal Tucumán 120',
-    zona: 'CENTRO-01',
-    estado: 'Venta',
-    hora_visita: '11:45 hs',
-    fecha: new Date().toISOString().split('T')[0],
-    latitud: -27.7885,
-    longitud: -64.2615,
-    monto_total: 24500,
-    forma_pago: 'Efectivo',
-    items: [
-      { nombre: 'Coca Cola Sabor Original 2.25L', cantidad: 6, precio_unitario: 2650, subtotal: 15900 },
-      { nombre: 'Galletitas Chocolinas Bagley 250g', cantidad: 4, precio_unitario: 1350, subtotal: 5400 },
-      { nombre: 'Agua Mineral Villavicencio 1.5L', cantidad: 3, precio_unitario: 1066, subtotal: 3200 },
-    ],
-  },
-  {
-    id_visita: 'vis-105',
-    tenant_id: '11111111-1111-4111-8111-111111111111',
-    vendedor_id: 'vend-002',
-    vendedor_nombre: 'Mariano Gómez',
-    comercio_id: 'com-centro-02',
-    comercio_nombre: 'Almacén Don Bosco',
-    direccion: 'Mitre 340',
-    zona: 'CENTRO-01',
-    estado: 'Cerrado',
-    motivo_rechazo: 'Local cerrado por duelo comercial',
-    hora_visita: '12:20 hs',
-    fecha: new Date().toISOString().split('T')[0],
-    latitud: -27.7915,
-    longitud: -64.2590,
-    monto_total: 0,
-  },
-];
+// Semilla de visitas: vacía por defecto para testing limpio
+const SEED_VISITAS: VisitaAuditoria[] = [];
 
 export class SupervisorService {
   private static instance: SupervisorService;
@@ -322,7 +197,7 @@ export class SupervisorService {
       localStorage.setItem(STORAGE_KEY_ZONAS, JSON.stringify(SEED_ZONAS));
     }
     if (!localStorage.getItem(STORAGE_KEY_VISITAS)) {
-      localStorage.setItem(STORAGE_KEY_VISITAS, JSON.stringify(SEED_VISITAS));
+      localStorage.setItem(STORAGE_KEY_VISITAS, JSON.stringify([]));
     }
     if (!localStorage.getItem(STORAGE_KEY_PRODUCTOS)) {
       const productosBase: ProductoTenant[] = DEFAULT_CATALOGO.map((p) => ({
@@ -335,6 +210,27 @@ export class SupervisorService {
         activo: true,
       }));
       localStorage.setItem(STORAGE_KEY_PRODUCTOS, JSON.stringify(productosBase));
+    }
+  }
+
+  /**
+   * Limpia visitas y registros transitorios para permitir pruebas limpias
+   */
+  public async limpiarDatosTesting(tenantId?: string | null): Promise<void> {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_VISITAS, JSON.stringify([]));
+      offlineStore.limpiarDatosTestingOffline();
+    }
+    try {
+      if (tenantId) {
+        await supabase.from('visitas').delete().eq('tenant_id', tenantId);
+        await supabase.from('pedidos').delete().eq('tenant_id', tenantId);
+      } else {
+        await supabase.from('visitas').delete().neq('id_visita', '00000000-0000-0000-0000-000000000000');
+        await supabase.from('pedidos').delete().neq('id_pedido', '00000000-0000-0000-0000-000000000000');
+      }
+    } catch {
+      // noop
     }
   }
 

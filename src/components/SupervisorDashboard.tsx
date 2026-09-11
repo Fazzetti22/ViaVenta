@@ -28,6 +28,7 @@ import {
   LogOut,
   Compass,
   Sparkles,
+  Trash2,
   X
 } from 'lucide-react';
 import { useRouter } from '../router';
@@ -181,8 +182,10 @@ export const SupervisorDashboard: React.FC = () => {
           attributionControl: false,
         }).setView([-27.7880, -64.2610], 14);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        // Tile layer oficial de OpenStreetMap (libre, sin requerir API key)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors',
         }).addTo(map);
 
         L.control.zoom({ position: 'topright' }).addTo(map);
@@ -247,48 +250,6 @@ export const SupervisorDashboard: React.FC = () => {
           markersLayerRef.current?.addLayer(marker);
         });
 
-        // Pines de comercios pendientes
-        if (filtroEstado === 'todos' || filtroEstado === 'Pendiente') {
-          const comerciosPendientes = [
-            { nombre: 'Autoservicio Libertad', lat: -27.7950, lng: -64.2630, zona: 'CENTRO-01' },
-            { nombre: 'Kiosco El Sol', lat: -27.8105, lng: -64.2540, zona: 'SUR-01' },
-            { nombre: 'Fiambrería Rivadavia', lat: -27.7840, lng: -64.2650, zona: 'NORTE-01' },
-            { nombre: 'Minimarket Los Amigos', lat: -27.8020, lng: -64.2660, zona: 'SUR-01' },
-          ].filter((p) => (filtroZona === 'todas' ? true : p.zona === filtroZona));
-
-          comerciosPendientes.forEach((p, idx) => {
-            const latLng = L.latLng(p.lat, p.lng);
-            bounds.extend(latLng);
-
-            const pendingIcon = L.divIcon({
-              className: 'custom-supervisor-pin-pending',
-              html: `
-                <div style="position: relative; display: flex; align-items: center; justify-content: center;">
-                  <div style="width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; font-size: 11px; box-shadow: 0 2px 4px rgba(0,0,0,0.15); border: 2px solid white; background-color: #d97706;">
-                    ${idx + 1}
-                  </div>
-                  <div style="position: absolute; bottom: -3px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #d97706;"></div>
-                </div>
-              `,
-              iconSize: [24, 28],
-              iconAnchor: [12, 28],
-              popupAnchor: [0, -26],
-            });
-
-            const m = L.marker(latLng, { icon: pendingIcon });
-            m.bindPopup(`
-              <div style="font-family: system-ui, sans-serif; padding: 2px;">
-                <div style="font-size: 13px; font-weight: 700; color: #0f172a;">${p.nombre}</div>
-                <div style="font-size: 11px; color: #64748b;">Zona ${p.zona}</div>
-                <div style="margin-top: 6px; font-size: 10px; font-weight: 700; color: #b45309; background-color: #fffbeb; padding: 2px 8px; border-radius: 9999px; display: inline-block; border: 1px solid #fde68a;">
-                  PENDIENTE DE VISITA
-                </div>
-              </div>
-            `);
-            markersLayerRef.current?.addLayer(m);
-          });
-        }
-
         // Pines de última ubicación GPS conocida de cada preventista
         vendedores.forEach((vend) => {
           if (filtroVendedorId !== 'todos' && vend.id_usuario !== filtroVendedorId) return;
@@ -326,6 +287,8 @@ export const SupervisorDashboard: React.FC = () => {
 
         if (bounds.isValid()) {
           leafletMapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+        } else {
+          leafletMapRef.current.setView([-27.7880, -64.2610], 14);
         }
       }
     }, 150);
@@ -395,6 +358,14 @@ export const SupervisorDashboard: React.FC = () => {
     await supervisorService.asignarVendedorAZona(idZona, vendedorId, vendNombre);
     mostrarToast(`Vendedor asignado a la zona correctamente.`);
     await refrescarDatosTenant(activeTenantId);
+  };
+
+  const handleLimpiarDatosPrueba = async () => {
+    if (confirm('¿Desea limpiar todas las visitas y pedidos de prueba para reiniciar el testing?')) {
+      await supervisorService.limpiarDatosTesting(activeTenantId);
+      await refrescarDatosTenant(activeTenantId);
+      mostrarToast('Datos de prueba reiniciados con éxito');
+    }
   };
 
   const handleExportarVentasCSV = () => {
@@ -618,6 +589,15 @@ export const SupervisorDashboard: React.FC = () => {
             >
               <Smartphone className="w-3.5 h-3.5 text-blue-600" />
               <span>PWA Preventista</span>
+            </button>
+
+            <button
+              onClick={handleLimpiarDatosPrueba}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-red-700 bg-slate-100 hover:bg-red-50 border border-slate-200 hover:border-red-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Limpiar visitas y pedidos de prueba"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-red-600" />
+              <span>Limpiar Pruebas</span>
             </button>
 
             <button

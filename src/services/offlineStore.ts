@@ -161,79 +161,8 @@ export const DEFAULT_CATALOGO: ProductoCatalogo[] = [
   },
 ];
 
-// Comercios de la jornada asignada (Zona SUR-01 Santiago del Estero)
-export const DEFAULT_COMERCIOS_RUTA: ComercioRuta[] = [
-  {
-    id_comercio: 'com-sur-01',
-    nombre: 'Despensa Belgrano Sur',
-    direccion: 'Av. Belgrano Sur 1420',
-    telefono: '3855123456',
-    categoria: 'convenience_store',
-    latitud: -27.8010,
-    longitud: -64.2580,
-    estado_visita: 'pendiente',
-  },
-  {
-    id_comercio: 'com-sur-02',
-    nombre: 'Estudio Jurídico Dra. Morales & Asoc.',
-    direccion: 'Calle Alsina 680',
-    telefono: '3854987654',
-    categoria: 'lawyer',
-    latitud: -27.8045,
-    longitud: -64.2605,
-    estado_visita: 'pendiente',
-  },
-  {
-    id_comercio: 'com-sur-03',
-    nombre: 'Farmacia del Valle',
-    direccion: 'Av. Moreno Sur 910',
-    telefono: '3856112233',
-    categoria: 'pharmacy',
-    latitud: -27.8070,
-    longitud: -64.2560,
-    estado_visita: 'pendiente',
-  },
-  {
-    id_comercio: 'com-sur-04',
-    nombre: 'Ferretería & Bulonería Central',
-    direccion: 'Pellegrini 345',
-    telefono: '3854445566',
-    categoria: 'hardware_store',
-    latitud: -27.8105,
-    longitud: -64.2630,
-    estado_visita: 'pendiente',
-  },
-  {
-    id_comercio: 'com-sur-05',
-    nombre: 'Copistería & Imprenta Digital Mitre',
-    direccion: 'Av. Solís y Belgrano',
-    telefono: '3855778899',
-    categoria: 'print_shop',
-    latitud: -27.8150,
-    longitud: -64.2590,
-    estado_visita: 'pendiente',
-  },
-  {
-    id_comercio: 'com-sur-06',
-    nombre: 'Corralón de Materiales San Jorge',
-    direccion: 'Av. Belgrano Sur 1890',
-    telefono: '3854009911',
-    categoria: 'construction_store',
-    latitud: -27.8190,
-    longitud: -64.2645,
-    estado_visita: 'pendiente',
-  },
-  {
-    id_comercio: 'com-sur-07',
-    nombre: 'Estudio Contable Díaz & Cía',
-    direccion: 'Av. Belgrano Sur 2100',
-    telefono: '3854881122',
-    categoria: 'accounting',
-    latitud: -27.8220,
-    longitud: -64.2660,
-    estado_visita: 'pendiente',
-  },
-];
+// Comercios de la jornada asignada (inicialmente vacío para testing real sin datos ficticios)
+export const DEFAULT_COMERCIOS_RUTA: ComercioRuta[] = [];
 
 // Claves de almacenamiento
 const KEY_PREFIX = 'saas_pwa_vendedor_';
@@ -296,7 +225,7 @@ export class OfflineStoreService {
   private initDefaultsIfEmpty() {
     if (typeof localStorage === 'undefined') return;
     if (!localStorage.getItem(KEYS.COMERCIOS)) {
-      localStorage.setItem(KEYS.COMERCIOS, JSON.stringify(DEFAULT_COMERCIOS_RUTA));
+      localStorage.setItem(KEYS.COMERCIOS, JSON.stringify([]));
     }
     if (!localStorage.getItem(KEYS.CATALOGO)) {
       localStorage.setItem(KEYS.CATALOGO, JSON.stringify(DEFAULT_CATALOGO));
@@ -307,6 +236,17 @@ export class OfflineStoreService {
     if (!localStorage.getItem(KEYS.VISITAS_PENDIENTES)) {
       localStorage.setItem(KEYS.VISITAS_PENDIENTES, JSON.stringify([]));
     }
+  }
+
+  /**
+   * Limpia todos los datos offline temporales para permitir un testing limpio
+   */
+  public limpiarDatosTestingOffline(): void {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(KEYS.COMERCIOS, JSON.stringify([]));
+    localStorage.setItem(KEYS.PEDIDOS_PENDIENTES, JSON.stringify([]));
+    localStorage.setItem(KEYS.VISITAS_PENDIENTES, JSON.stringify([]));
+    this.notifyStatus();
   }
 
   // =========================================================================
