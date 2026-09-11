@@ -446,6 +446,63 @@ export class SupervisorService {
     }
   }
 
+  /**
+   * Sincroniza las zonas asignadas desde el SuperAdmin a la base del supervisor
+   */
+  public async sincronizarZonasTenant(
+    tenantId: string,
+    zonasNuevas: Array<{
+      codigo_zona: string;
+      nombre_comercial?: string;
+      total_comercios?: number;
+      comercios_ids?: string[];
+    }>
+  ): Promise<ZonaSupervision[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_ZONAS);
+      const list: ZonaSupervision[] = raw ? JSON.parse(raw) : [...SEED_ZONAS];
+
+      // Guardar asignaciones existentes de vendedores para ese tenant si las hubiera
+      const vendedoresPreviosPorCodigo = new Map<string, { id?: string; nombre?: string }>();
+      list
+        .filter((z) => z.tenant_id === tenantId)
+        .forEach((z) => {
+          if (z.vendedor_id) {
+            vendedoresPreviosPorCodigo.set(z.codigo_zona, {
+              id: z.vendedor_id,
+              nombre: z.vendedor_nombre,
+            });
+          }
+        });
+
+      // Filtrar las zonas de otros tenants
+      const otrasZonas = list.filter((z) => z.tenant_id !== tenantId);
+
+      // Crear las nuevas zonas asignadas
+      const zonasActualizadas: ZonaSupervision[] = zonasNuevas.map((zn, idx) => {
+        const prev = vendedoresPreviosPorCodigo.get(zn.codigo_zona);
+        return {
+          id_zona: `zona_${tenantId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}_${zn.codigo_zona.toLowerCase().replace(/[^a-zA-Z0-9]/g, '')}_${idx}`,
+          tenant_id: tenantId,
+          codigo_zona: zn.codigo_zona,
+          nombre_comercial: zn.nombre_comercial || `Zona ${zn.codigo_zona}`,
+          vendedor_id: prev?.id,
+          vendedor_nombre: prev?.nombre,
+          total_comercios: zn.total_comercios || 0,
+          comercios_ids: zn.comercios_ids || [],
+          activa: true,
+        };
+      });
+
+      const nuevaListaCompleta = [...otrasZonas, ...zonasActualizadas];
+      localStorage.setItem(STORAGE_KEY_ZONAS, JSON.stringify(nuevaListaCompleta));
+      return zonasActualizadas;
+    } catch (err) {
+      console.error('Error sincronizando zonas en supervisorService:', err);
+      return [];
+    }
+  }
+
   // =========================================================================
   // 3. ABM DE CATÁLOGO DE PRODUCTOS DEL TENANT
   // =========================================================================

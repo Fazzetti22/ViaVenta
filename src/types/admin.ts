@@ -69,3 +69,17 @@ export interface TenantWithDetails extends Empresa {
   total_vendedores?: number;
   zonas_asignadas?: string[];
 }
+
+export interface GeocodedAddressItem {
+  id_comercio?: string;
+  nombre: string;
+  direccion: string;
+  categoria: GooglePlaceCategory;
+  latitud: number;
+  longitud: number;
+  precision: 'exacta' | 'arteria_aproximada' | 'centroide_estimado' | 'gps_scraper';
+  detallesGeocodificacion?: string;
+  telefono?: string;
+  seleccionado?: boolean;
+  origen?: 'scraper_csv' | 'geocodificado' | 'manual';
+}

@@ -34,6 +34,8 @@ export interface ComercioMaster {
   categoria: string;
   latitud: number;
   longitud: number;
+  direccion?: string;
+  telefono?: string;
 }
 
 export interface Zona {

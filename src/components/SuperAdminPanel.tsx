@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, 
   MapPin, 
@@ -23,7 +23,19 @@ import {
   Trash2,
   Lock,
   Globe,
-  Filter
+  Filter,
+  FileText,
+  Edit3,
+  CheckCircle2,
+  AlertCircle,
+  Navigation,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  Compass,
+  Eye,
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { useRouter } from '../router';
 import { ViaVentaLogo } from './ViaVentaLogo';
@@ -38,7 +50,8 @@ import {
   GoogleCloudQuotaStats, 
   GooglePlaceCategory, 
   GridZoneComputed, 
-  TenantWithDetails 
+  TenantWithDetails,
+  GeocodedAddressItem
 } from '../types/admin';
 
 interface SuperAdminPanelProps {
@@ -72,11 +85,160 @@ export const getCategoryLabel = (id: string): string => {
   return map[id] || id;
 };
 
-const PRESET_CENTROIDES = [
-  { nombre: 'Santiago Centro (Plaza Libertad)', lat: -27.7880, lng: -64.2610 },
-  { nombre: 'La Banda Centro (Estación)', lat: -27.7320, lng: -64.2420 },
-  { nombre: 'Sur (Av. Belgrano & América del Sur)', lat: -27.8080, lng: -64.2610 },
-  { nombre: 'Oeste (Barrio Autonomía / Smata)', lat: -27.7850, lng: -64.2880 },
+export interface PresetCentroide {
+  nombre: string;
+  grupo: 'Plazas y Centros Cívicos' | 'Cruces de Avenidas Estratégicos' | 'La Banda y Accesos';
+  detalle: string;
+  lat: number;
+  lng: number;
+}
+
+export const PRESET_CENTROIDES: PresetCentroide[] = [
+  // 1. Plazas y Centros Cívicos
+  {
+    nombre: 'Plaza Libertad (Centro Cívico)',
+    grupo: 'Plazas y Centros Cívicos',
+    detalle: 'Catedral, Casa de Gobierno, Peatonales Tucumán y Absalón Rojas',
+    lat: -27.7880,
+    lng: -64.2610,
+  },
+  {
+    nombre: 'Plaza San Martín (Belgrano Sur)',
+    grupo: 'Plazas y Centros Cívicos',
+    detalle: 'Av. Belgrano Sur & Alsina, zona bancaria y gastronómica',
+    lat: -27.7915,
+    lng: -64.2645,
+  },
+  {
+    nombre: 'Plaza Absalón Rojas (Av. Colón & Libertad)',
+    grupo: 'Plazas y Centros Cívicos',
+    detalle: 'Cruce Av. Colón con Av. Libertad, B° Congreso / B° Centro',
+    lat: -27.7882,
+    lng: -64.2718,
+  },
+  {
+    nombre: 'Parque Aguirre (Costanera & Salta)',
+    grupo: 'Plazas y Centros Cívicos',
+    detalle: 'Costanera Río Dulce, clubes deportivos y paseo recreativo',
+    lat: -27.7830,
+    lng: -64.2490,
+  },
+  {
+    nombre: 'Plaza Belgrano (Centro La Banda)',
+    grupo: 'Plazas y Centros Cívicos',
+    detalle: 'Av. Besares & Belgrano, Estación de Trenes La Banda',
+    lat: -27.7335,
+    lng: -64.2440,
+  },
+  {
+    nombre: 'Plaza Sarmiento (Buenos Aires & 3 de Febrero)',
+    grupo: 'Plazas y Centros Cívicos',
+    detalle: 'Zona céntrica sur, colegios y comercios de proximidad',
+    lat: -27.7968,
+    lng: -64.2575,
+  },
+
+  // 2. Cruces de Avenidas Principales
+  {
+    nombre: 'Av. Rivadavia & Av. Belgrano',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Divisoria Belgrano Norte y Sur, corredor central de alto tráfico',
+    lat: -27.7862,
+    lng: -64.2612,
+  },
+  {
+    nombre: 'Av. Aguirre & Av. Rivadavia',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Cruce zona Oeste, B° Francisco de Aguirre y B° Congreso',
+    lat: -27.7850,
+    lng: -64.2810,
+  },
+  {
+    nombre: 'Av. Colón & Av. Solís',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Nodo comercial Sur, B° Cabildo, B° Juan XXIII y B° Tradición',
+    lat: -27.8105,
+    lng: -64.2725,
+  },
+  {
+    nombre: 'Av. Belgrano & Av. Solís',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Eje comercial mayorista, corralones, repuestos y almacenes',
+    lat: -27.8106,
+    lng: -64.2611,
+  },
+  {
+    nombre: 'Av. Moreno & Av. Alsina',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Eje Hospital Regional, Tribunales y comercios conexos',
+    lat: -27.7960,
+    lng: -64.2662,
+  },
+  {
+    nombre: 'Av. Belgrano & Av. Lugones',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Eje de conexión Este-Oeste en zona media sur',
+    lat: -27.8020,
+    lng: -64.2610,
+  },
+  {
+    nombre: 'Av. Colón & Av. Pedro León Gallo',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Acceso comercial a zona Oeste (B° Primera Junta, B° San Martín)',
+    lat: -27.7940,
+    lng: -64.2720,
+  },
+  {
+    nombre: 'Av. Belgrano & Av. América del Sur',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Acceso Sur (B° Ejército Argentino, Almirante Brown, Campo Contreras)',
+    lat: -27.8160,
+    lng: -64.2615,
+  },
+  {
+    nombre: 'Av. Independencia & Juncal',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Barrio Belgrano, distribuidoras y comercios barriales',
+    lat: -27.8075,
+    lng: -64.2435,
+  },
+  {
+    nombre: 'Barrio Autonomía (Av. 27 de Abril & Cruce Smata)',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Nodo comercial autónomo del extremo Oeste',
+    lat: -27.8090,
+    lng: -64.3035,
+  },
+  {
+    nombre: 'Av. Aguirre & Av. Solís',
+    grupo: 'Cruces de Avenidas Estratégicos',
+    detalle: 'Circunvalación comercial Suroeste, B° Mariano Moreno',
+    lat: -27.8105,
+    lng: -64.2850,
+  },
+
+  // 3. La Banda y Accesos
+  {
+    nombre: 'La Banda - Av. San Martín & Aristóbulo del Valle',
+    grupo: 'La Banda y Accesos',
+    detalle: 'Centro bancario y comercial de La Banda',
+    lat: -27.7390,
+    lng: -64.2475,
+  },
+  {
+    nombre: 'La Banda - Av. España & Av. Alberdi',
+    grupo: 'La Banda y Accesos',
+    detalle: 'Corredor comercial y salida hacia autopista',
+    lat: -27.7360,
+    lng: -64.2505,
+  },
+  {
+    nombre: 'Autopista J.D. Perón & Av. Lugones',
+    grupo: 'La Banda y Accesos',
+    detalle: 'Cruce interurbano Santiago - La Banda',
+    lat: -27.7600,
+    lng: -64.2530,
+  },
 ];
 
 export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
@@ -87,7 +249,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
   const [adminTab, setAdminTab] = useState<'barrido' | 'grid' | 'tenants' | 'codigo'>('barrido');
 
   // 1. Estado de Prospección (Google Places)
-  const [selectedCentroide, setSelectedCentroide] = useState(PRESET_CENTROIDES[0]);
+  const [selectedCentroide, setSelectedCentroide] = useState<PresetCentroide>(PRESET_CENTROIDES[0]);
   const [customLat, setCustomLat] = useState<number>(-27.7880);
   const [customLng, setCustomLng] = useState<number>(-64.2610);
   const [radioMetros, setRadioMetros] = useState<number>(2500);
@@ -108,6 +270,61 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
   const [quotaStats, setQuotaStats] = useState<GoogleCloudQuotaStats>(googlePlacesService.getQuotaStats());
   const [masterComercios, setMasterComercios] = useState<ComercioMaster[]>([]);
 
+  // 1.b Estados de Geocodificación Manual, CSV / Scraper y por Lote
+  const [modoGeocodificacion, setModoGeocodificacion] = useState<'csv' | 'lote' | 'individual'>('csv');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [archivoCsvNombre, setArchivoCsvNombre] = useState<string | null>(null);
+  const [isDraggingCsv, setIsDraggingCsv] = useState(false);
+  const [statsImportacion, setStatsImportacion] = useState<{ conGpsScraper: number; geocodificados: number; omitidos: number } | null>(null);
+  const [textoLote, setTextoLote] = useState<string>('');
+  const [categoriaLote, setCategoriaLote] = useState<GooglePlaceCategory>('store');
+  const [isGeocodingLote, setIsGeocodingLote] = useState(false);
+  const [geocodingProgress, setGeocodingProgress] = useState<{ actual: number; total: number } | null>(null);
+  const [geocodedItems, setGeocodedItems] = useState<GeocodedAddressItem[]>([]);
+  
+  // Individual
+  const [indivNombre, setIndivNombre] = useState('');
+  const [indivDireccion, setIndivDireccion] = useState('');
+  const [indivCategoria, setIndivCategoria] = useState<GooglePlaceCategory>('store');
+  const [indivBuscando, setIndivBuscando] = useState(false);
+  const [indivResultado, setIndivResultado] = useState<GeocodedAddressItem | null>(null);
+
+  // Búsqueda y Edición en Catálogo Maestro
+  const [busquedaCatalogo, setBusquedaCatalogo] = useState('');
+  const [filtroCatCatalogo, setFiltroCatCatalogo] = useState<string>('todas');
+  const [comercioEditando, setComercioEditando] = useState<ComercioMaster | null>(null);
+  const [editNombre, setEditNombre] = useState('');
+  const [editDireccion, setEditDireccion] = useState('');
+  const [editCategoria, setEditCategoria] = useState<string>('store');
+  const [editLat, setEditLat] = useState<number>(-27.7880);
+  const [editLng, setEditLng] = useState<number>(-64.2610);
+  const [editBuscandoCoordenadas, setEditBuscandoCoordenadas] = useState(false);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ tipo: 'success' | 'error' | 'info'; texto: string } | null>(null);
+
+  // 1.c Modal de Pre-validación de Puntos de Referencia
+  const [modalPrevalidarPuntos, setModalPrevalidarPuntos] = useState(false);
+  const [filtroGrupoPuntos, setFiltroGrupoPuntos] = useState<string>('todos');
+  const [busquedaPunto, setBusquedaPunto] = useState<string>('');
+  const [puntoCopiado, setPuntoCopiado] = useState<string | null>(null);
+
+  const handleCopiarCoordenadas = (lat: number, lng: number, nombre: string) => {
+    const coordsStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    navigator.clipboard.writeText(coordsStr);
+    setPuntoCopiado(nombre);
+    setTimeout(() => setPuntoCopiado(null), 2000);
+  };
+
+  const handleSeleccionarPuntoPrevalidado = (punto: PresetCentroide) => {
+    setSelectedCentroide(punto);
+    setCustomLat(punto.lat);
+    setCustomLng(punto.lng);
+    setModalPrevalidarPuntos(false);
+    setFeedbackMsg({
+      tipo: 'info',
+      texto: `Punto de referencia fijado: "${punto.nombre}" (${punto.lat.toFixed(4)}, ${punto.lng.toFixed(4)}).`,
+    });
+  };
+
   // 2. Estado de Zonificación Grid
   const [computedZones, setComputedZones] = useState<GridZoneComputed[]>([]);
   const [isClustering, setIsClustering] = useState(false);
@@ -119,9 +336,15 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
   const [nuevoNombreEmpresa, setNuevoNombreEmpresa] = useState('');
   const [nuevoSupervisorEmail, setNuevoSupervisorEmail] = useState('');
   const [nuevoSupervisorPassword, setNuevoSupervisorPassword] = useState('admin123');
-  const [tenantActionMsg, setTenantActionMsg] = useState<string | null>(null);
+  const [tenantActionMsg, setTenantActionMsg] = useState<{ tipo: 'success' | 'error' | 'info'; texto: string } | null>(null);
   const [isCreatingTenant, setIsCreatingTenant] = useState(false);
   const [assigningTenantId, setAssigningTenantId] = useState<string | null>(null);
+  
+  // Modal interactivo de asignación de zonas para Tenants
+  const [modalAsignarTenant, setModalAsignarTenant] = useState<TenantWithDetails | null>(null);
+  const [zonasSeleccionadasModal, setZonasSeleccionadasModal] = useState<string[]>([]);
+  const [filtroSectorModal, setFiltroSectorModal] = useState<string>('todos');
+  const [nuevaZonaCustom, setNuevaZonaCustom] = useState<string>('');
 
   // 4. Utilidades
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -138,6 +361,9 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
     if (list.length > 0) {
       const zonas = gridClusteringService.agruparComerciosEnGrid(list, { targetPorZona: targetSizePorZona });
       setComputedZones(zonas);
+    } else {
+      const zonasDef = gridClusteringService.getZonasPreconfiguradasSantiago();
+      setComputedZones(zonasDef);
     }
   };
 
@@ -145,6 +371,40 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
     const list = await tenantService.getTenants();
     setTenants(list);
   };
+
+  const zonasDisponiblesModal = React.useMemo(() => {
+    const base = computedZones.length > 0
+      ? computedZones
+      : gridClusteringService.getZonasPreconfiguradasSantiago();
+
+    const map = new Map<string, (typeof base)[0]>();
+    for (const z of base) {
+      map.set(z.codigo_zona, z);
+    }
+    const defaults = gridClusteringService.getZonasPreconfiguradasSantiago();
+    for (const d of defaults) {
+      if (!map.has(d.codigo_zona)) {
+        map.set(d.codigo_zona, d);
+      }
+    }
+    if (modalAsignarTenant?.zonas_asignadas) {
+      for (const code of modalAsignarTenant.zonas_asignadas) {
+        if (!map.has(code)) {
+          map.set(code, {
+            codigo_zona: code,
+            sector: code.includes('SUR') ? 'SUR' : code.includes('NORTE') ? 'NORTE' : code.includes('ESTE') ? 'ESTE' : code.includes('OESTE') ? 'OESTE' : 'CENTRO',
+            numero_secuencial: 1,
+            centroide_lat: -27.7880,
+            centroide_lng: -64.2610,
+            total_comercios: 20,
+            comercios: [],
+            radio_estimado_metros: 800,
+          });
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [computedZones, modalAsignarTenant]);
 
   const handleImpersonateSuperAdmin = (email: string = 'francoazzetti@gmail.com') => {
     sessionManager.saveSession({
@@ -222,6 +482,233 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
     }
   };
 
+  const notificar = (texto: string, tipo: 'success' | 'error' | 'info' = 'success') => {
+    setFeedbackMsg({ texto, tipo });
+    setTimeout(() => setFeedbackMsg(null), 4000);
+  };
+
+  const handleInsertarEjemploLote = () => {
+    setTextoLote(`Supermercado Luque, Juncal 510, Supermercado
+Autoservicio Belgrano, Av. Belgrano Sur 1400, Autoservicio
+Farmacia del Pueblo, 24 de Septiembre 150, Farmacia
+Distribuidora San Carlos, Av. Moreno 1100, Comercio
+Corralón San José, Av. Solís 450, Casa de Construcción
+Minimercado Sarmiento, Sarmiento 180, Almacén
+Ferretería El Tornillo, Av. Colón Sur 620, Ferretería
+Supermercado Vea, Rivadavia 340, Supermercado`);
+  };
+
+  const handleDescargarPlantillaCsv = () => {
+    const contenido = `nombre,direccion,categoria,latitud,longitud,telefono
+Supermercado Luque,Juncal 510,grocery_or_supermarket,-27.807500,-64.243500,3854123456
+Farmacia Belgrano,Av. Belgrano Sur 1400,pharmacy,-27.808000,-64.261000,3854987654
+Ferretería Colón,Av. Colón Sur 2100,hardware_store,-27.810500,-64.272500,3854332211
+Despensa El Cruce,Av. Solís 450,convenience_store,-27.810600,-64.261100,
+Corralón San Martín,Av. Rivadavia 250,construction_store,-27.786200,-64.261200,3854220011`;
+
+    const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'plantilla_scraper_comercios_santiago.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    notificar('Descargando plantilla CSV de ejemplo.', 'info');
+  };
+
+  const leerYProcesarArchivoCsv = (file: File) => {
+    setArchivoCsvNombre(file.name);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const contenido = event.target?.result as string;
+      if (!contenido) return;
+      setIsGeocodingLote(true);
+      setGeocodedItems([]);
+      setGeocodingProgress({ actual: 0, total: 1 });
+      setStatsImportacion(null);
+      try {
+        const res = await googlePlacesService.procesarCsvOTextoScraper(
+          contenido,
+          categoriaLote,
+          (actual, total) => {
+            setGeocodingProgress({ actual, total });
+          }
+        );
+        setGeocodedItems(res.items);
+        setStatsImportacion({
+          conGpsScraper: res.conGpsScraper,
+          geocodificados: res.geocodificados,
+          omitidos: res.omitidos,
+        });
+        notificar(
+          `Archivo procesado: ${res.items.length} locales identificados (${res.conGpsScraper} con coordenadas satelitales directas, ${res.geocodificados} geocodificados).`,
+          'success'
+        );
+      } catch (err) {
+        notificar('Ocurrió un error al procesar el archivo CSV.', 'error');
+      } finally {
+        setIsGeocodingLote(false);
+        setGeocodingProgress(null);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSubirArchivoCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    leerYProcesarArchivoCsv(file);
+  };
+
+  const handleDropCsv = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingCsv(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      leerYProcesarArchivoCsv(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleGeocodificarLote = async () => {
+    if (!textoLote.trim()) {
+      notificar('Ingresa o pega al menos una dirección para geocodificar.', 'info');
+      return;
+    }
+
+    setIsGeocodingLote(true);
+    setGeocodedItems([]);
+    setGeocodingProgress({ actual: 0, total: 1 });
+
+    try {
+      const res = await googlePlacesService.procesarCsvOTextoScraper(
+        textoLote,
+        categoriaLote,
+        (actual, total) => {
+          setGeocodingProgress({ actual, total });
+        }
+      );
+      setGeocodedItems(res.items);
+      setStatsImportacion({
+        conGpsScraper: res.conGpsScraper,
+        geocodificados: res.geocodificados,
+        omitidos: res.omitidos,
+      });
+      notificar(`Procesamiento completado: ${res.items.length} locales identificados (${res.conGpsScraper} con GPS del scraper, ${res.geocodificados} geocodificados).`, 'success');
+    } catch (e) {
+      notificar('Ocurrió un inconveniente geocodificando las direcciones.', 'error');
+    } finally {
+      setIsGeocodingLote(false);
+      setGeocodingProgress(null);
+    }
+  };
+
+  const handleGuardarGeocodificados = async () => {
+    if (geocodedItems.length === 0) return;
+    const res = await googlePlacesService.guardarComerciosGeocodificados(geocodedItems);
+    await loadMasterData();
+    notificar(`¡Éxito! ${res.agregados} comercios guardados en Catálogo Maestro (${res.yaExistentes} omitidos por duplicidad).`, 'success');
+    setGeocodedItems([]);
+    setTextoLote('');
+  };
+
+  const handleEliminarFilaGeocodificada = (index: number) => {
+    setGeocodedItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleGeocodificarIndividual = async () => {
+    if (!indivDireccion.trim()) {
+      notificar('Ingresa la dirección física del comercio.', 'info');
+      return;
+    }
+    setIndivBuscando(true);
+    try {
+      const res = await googlePlacesService.geocodificarDireccionSantiago(
+        indivDireccion,
+        indivNombre || undefined,
+        indivCategoria
+      );
+      setIndivResultado(res);
+      if (res) {
+        notificar(`Coordenadas encontradas: Lat ${res.latitud}, Lng ${res.longitud}`, 'success');
+      } else {
+        notificar('No se pudo encontrar la dirección dentro del radio de Santiago del Estero.', 'error');
+      }
+    } finally {
+      setIndivBuscando(false);
+    }
+  };
+
+  const handleGuardarIndividual = async () => {
+    if (!indivResultado) return;
+    const res = await googlePlacesService.guardarComerciosGeocodificados([indivResultado]);
+    await loadMasterData();
+    if (res.agregados > 0) {
+      notificar(`Comercio "${indivResultado.nombre}" agregado con éxito al catálogo maestro.`, 'success');
+      setIndivNombre('');
+      setIndivDireccion('');
+      setIndivResultado(null);
+    } else {
+      notificar('Este comercio ya se encontraba registrado en el catálogo.', 'info');
+    }
+  };
+
+  const handleAbrirEditarComercio = (c: ComercioMaster) => {
+    setComercioEditando(c);
+    setEditNombre(c.nombre);
+    setEditDireccion(c.direccion || '');
+    setEditCategoria(c.categoria || 'store');
+    setEditLat(c.latitud);
+    setEditLng(c.longitud);
+  };
+
+  const handleRegeocodificarEdicion = async () => {
+    if (!editDireccion.trim()) {
+      notificar('Ingresa una dirección para calcular sus coordenadas.', 'info');
+      return;
+    }
+    setEditBuscandoCoordenadas(true);
+    try {
+      const geo = await googlePlacesService.geocodificarDireccionSantiago(
+        editDireccion,
+        editNombre,
+        editCategoria as GooglePlaceCategory
+      );
+      if (geo) {
+        setEditLat(geo.latitud);
+        setEditLng(geo.longitud);
+        notificar(`Nuevas coordenadas calculadas: Lat ${geo.latitud}, Lng ${geo.longitud}`, 'success');
+      }
+    } finally {
+      setEditBuscandoCoordenadas(false);
+    }
+  };
+
+  const handleGuardarEdicionComercio = async () => {
+    if (!comercioEditando) return;
+    const idTarget = comercioEditando.id_comercio || comercioEditando.google_place_id;
+    const ok = await googlePlacesService.actualizarComercioMaster(idTarget, {
+      nombre: editNombre,
+      direccion: editDireccion,
+      categoria: editCategoria,
+      latitud: editLat,
+      longitud: editLng,
+    });
+    if (ok) {
+      await loadMasterData();
+      notificar(`Comercio "${editNombre}" actualizado con éxito con sus nuevas coordenadas.`, 'success');
+      setComercioEditando(null);
+    }
+  };
+
+  const handleEliminarComercio = async (c: ComercioMaster) => {
+    if (confirm(`¿Deseas eliminar "${c.nombre}" del catálogo maestro?`)) {
+      const idTarget = c.id_comercio || c.google_place_id;
+      await googlePlacesService.eliminarComercioMaster(idTarget);
+      await loadMasterData();
+      notificar(`Comercio eliminado del catálogo.`, 'info');
+    }
+  };
+
   const handleEjecutarZonificacion = () => {
     setIsClustering(true);
     setTimeout(() => {
@@ -255,33 +742,92 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
       setNuevoNombreEmpresa('');
       setNuevoSupervisorEmail('');
       setNuevoSupervisorPassword('admin123');
-      setTenantActionMsg(res.message);
+      setTenantActionMsg({ tipo: 'success', texto: res.message });
       await loadTenants();
       setTimeout(() => setTenantActionMsg(null), 6000);
     } else {
-      setTenantActionMsg(res.message);
+      setTenantActionMsg({ tipo: 'error', texto: res.message });
     }
   };
 
   const handleToggleTenant = async (tenantId: string) => {
     const res = await tenantService.toggleTenantStatus(tenantId);
     if (res.success) {
-      setTenantActionMsg(res.message);
+      setTenantActionMsg({ tipo: 'info', texto: res.message });
       await loadTenants();
-      setTimeout(() => setTenantActionMsg(null), 3000);
+      setTimeout(() => setTenantActionMsg(null), 4000);
+    } else {
+      setTenantActionMsg({ tipo: 'error', texto: res.message });
     }
   };
 
-  const handleAsignarZonas = async (tenantId: string) => {
+  const handleAsignarZonas = async (tenantId: string, codigos?: string[]) => {
     setAssigningTenantId(tenantId);
     setTenantActionMsg(null);
-    const res = await tenantService.asignarZonasGrid(tenantId);
+    const res = await tenantService.asignarZonasGrid(tenantId, codigos);
     setAssigningTenantId(null);
+    setTenantActionMsg({
+      tipo: res.success ? 'success' : 'error',
+      texto: res.message,
+    });
     if (res.success) {
-      setTenantActionMsg(res.message);
       await loadTenants();
-      setTimeout(() => setTenantActionMsg(null), 4000);
     }
+    setTimeout(() => setTenantActionMsg(null), 5000);
+    return res;
+  };
+
+  const handleAbrirModalAsignarZonas = (tenant: TenantWithDetails) => {
+    setModalAsignarTenant(tenant);
+    const zonasDisp = computedZones.length > 0
+      ? computedZones
+      : gridClusteringService.getZonasPreconfiguradasSantiago();
+
+    if (tenant.zonas_asignadas && tenant.zonas_asignadas.length > 0) {
+      setZonasSeleccionadasModal([...tenant.zonas_asignadas]);
+    } else {
+      setZonasSeleccionadasModal(zonasDisp.map((z) => z.codigo_zona));
+    }
+    setFiltroSectorModal('todos');
+    setNuevaZonaCustom('');
+  };
+
+  const handleToggleZonaModal = (codigo: string) => {
+    setZonasSeleccionadasModal((prev) =>
+      prev.includes(codigo) ? prev.filter((c) => c !== codigo) : [...prev, codigo]
+    );
+  };
+
+  const handleConfirmarAsignacionModal = async () => {
+    if (!modalAsignarTenant) return;
+    if (zonasSeleccionadasModal.length === 0) {
+      setTenantActionMsg({
+        tipo: 'error',
+        texto: 'Seleccione al menos una zona para asignar a la distribuidora.',
+      });
+      return;
+    }
+    await handleAsignarZonas(modalAsignarTenant.tenant_id, zonasSeleccionadasModal);
+    setModalAsignarTenant(null);
+  };
+
+  const handleAsignarTodasDirectoModal = async () => {
+    if (!modalAsignarTenant) return;
+    const zonasDisp = computedZones.length > 0
+      ? computedZones
+      : gridClusteringService.getZonasPreconfiguradasSantiago();
+    const todosCodigos = zonasDisp.map((z) => z.codigo_zona);
+    await handleAsignarZonas(modalAsignarTenant.tenant_id, todosCodigos);
+    setModalAsignarTenant(null);
+  };
+
+  const handleAgregarZonaCustom = () => {
+    if (!nuevaZonaCustom.trim()) return;
+    const codigoNormalizado = nuevaZonaCustom.trim().toUpperCase();
+    if (!zonasSeleccionadasModal.includes(codigoNormalizado)) {
+      setZonasSeleccionadasModal((prev) => [...prev, codigoNormalizado]);
+    }
+    setNuevaZonaCustom('');
   };
 
   const copyToClipboard = (text: string, key: string) => {
@@ -533,52 +1079,82 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
               </div>
 
               {/* Controles de Coordenadas y Radio */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Ubicación de Referencia
-                  </label>
-                  <select
-                    value={selectedCentroide.nombre}
-                    onChange={(e) => {
-                      const sel = PRESET_CENTROIDES.find((p) => p.nombre === e.target.value);
-                      if (sel) {
-                        setSelectedCentroide(sel);
-                        setCustomLat(sel.lat);
-                        setCustomLng(sel.lng);
-                      }
-                    }}
-                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
-                  >
-                    {PRESET_CENTROIDES.map((p) => (
-                      <option key={p.nombre} value={p.nombre}>
-                        {p.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Coordenadas (Lat / Lng)
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={customLat}
-                      onChange={(e) => setCustomLat(parseFloat(e.target.value))}
-                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-blue-600"
-                    />
-                    <input
-                      type="number"
-                      step="0.0001"
-                      value={customLng}
-                      onChange={(e) => setCustomLng(parseFloat(e.target.value))}
-                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-blue-600"
-                    />
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-700">
+                        Ubicación de Referencia
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setModalPrevalidarPuntos(true)}
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Verificar y auditar coordenadas de todas las plazas y cruces"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>Pre-validar ({PRESET_CENTROIDES.length})</span>
+                      </button>
+                    </div>
+                    <select
+                      value={selectedCentroide.nombre}
+                      onChange={(e) => {
+                        const sel = PRESET_CENTROIDES.find((p) => p.nombre === e.target.value);
+                        if (sel) {
+                          setSelectedCentroide(sel);
+                          setCustomLat(sel.lat);
+                          setCustomLng(sel.lng);
+                        }
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600 font-medium"
+                    >
+                      <optgroup label="🏛️ Plazas y Centros Cívicos">
+                        {PRESET_CENTROIDES.filter((p) => p.grupo === 'Plazas y Centros Cívicos').map((p) => (
+                          <option key={p.nombre} value={p.nombre}>
+                            {p.nombre}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="🚦 Cruces de Avenidas Estratégicos">
+                        {PRESET_CENTROIDES.filter((p) => p.grupo === 'Cruces de Avenidas Estratégicos').map((p) => (
+                          <option key={p.nombre} value={p.nombre}>
+                            {p.nombre}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="🌉 La Banda y Accesos">
+                        {PRESET_CENTROIDES.filter((p) => p.grupo === 'La Banda y Accesos').map((p) => (
+                          <option key={p.nombre} value={p.nombre}>
+                            {p.nombre}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
                   </div>
-                </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">
+                      Coordenadas (Lat / Lng)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={customLat}
+                        onChange={(e) => setCustomLat(parseFloat(e.target.value))}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-blue-600"
+                        title="Latitud"
+                      />
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={customLng}
+                        onChange={(e) => setCustomLng(parseFloat(e.target.value))}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-blue-600"
+                        title="Longitud"
+                      />
+                    </div>
+                  </div>
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
@@ -610,6 +1186,67 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Accesos Rápidos a Puntos Neurálgicos (Plazas y Cruces de Avenidas) */}
+              <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                    <Compass className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Puntos Rápidos:</span>
+                  </span>
+                  {[
+                    'Plaza Libertad (Centro Cívico)',
+                    'Av. Rivadavia & Av. Belgrano',
+                    'Av. Colón & Av. Solís',
+                    'Av. Belgrano & Av. Solís',
+                    'Av. Moreno & Av. Alsina',
+                    'Av. Colón & Av. Pedro León Gallo',
+                    'Plaza Belgrano (Centro La Banda)',
+                  ].map((puntoNombre) => {
+                    const puntoObj = PRESET_CENTROIDES.find((p) => p.nombre === puntoNombre);
+                    if (!puntoObj) return null;
+                    const isActivo = selectedCentroide.nombre === puntoObj.nombre;
+                    return (
+                      <button
+                        key={puntoNombre}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCentroide(puntoObj);
+                          setCustomLat(puntoObj.lat);
+                          setCustomLng(puntoObj.lng);
+                        }}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                          isActivo
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                        }`}
+                      >
+                        {puntoNombre.replace(' (Centro Cívico)', '').replace(' (Centro La Banda)', ' (La Banda)')}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-[11px] text-slate-500 bg-blue-50/60 border border-blue-100 rounded-md px-2.5 py-1 flex items-center gap-1.5">
+                    <span className="font-semibold text-blue-800">{selectedCentroide.nombre}:</span>
+                    <span className="text-slate-600">{selectedCentroide.detalle}</span>
+                    <span className="font-mono text-[10px] text-blue-700 bg-blue-100 px-1 py-0.2 rounded font-bold">
+                      {customLat.toFixed(4)}, {customLng.toFixed(4)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalPrevalidarPuntos(true)}
+                    className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                    title="Auditar todos los puntos notables y abrirlos en Google Maps"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Auditar y Pre-validar</span>
+                  </button>
+                </div>
+              </div>
+            </div>
 
               {/* Categorías */}
               <div>
@@ -668,7 +1305,456 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
               </div>
             )}
 
-            {/* Catálogo Maestro Actual */}
+            {/* Banner de Feedback Operativo */}
+            {feedbackMsg && (
+              <div
+                className={`p-3.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+                  feedbackMsg.tipo === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : feedbackMsg.tipo === 'error'
+                    ? 'bg-rose-50 text-rose-800 border-rose-200'
+                    : 'bg-blue-50 text-blue-800 border-blue-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {feedbackMsg.tipo === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : feedbackMsg.tipo === 'error' ? (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                  )}
+                  <span>{feedbackMsg.texto}</span>
+                </div>
+                <button
+                  onClick={() => setFeedbackMsg(null)}
+                  className="text-slate-400 hover:text-slate-700 p-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* PANEL DE GEOCODIFICACIÓN POR DIRECCIÓN (SOLUCIÓN AL DESFASE GEOGRÁFICO) */}
+            <div className="bg-white border-2 border-indigo-100 rounded-xl p-6 shadow-xs space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold">
+                      <Navigation className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Geocodificador por Dirección Física (Santiago del Estero & La Banda)
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Ingresa direcciones reales para calcular sus coordenadas exactas en el radio urbano y corregir los barridos automáticos.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setModoGeocodificacion('csv')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      modoGeocodificacion === 'csv'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Subir CSV / Scraper</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModoGeocodificacion('lote')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      modoGeocodificacion === 'lote'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Pegar Lista / Texto</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModoGeocodificacion('individual')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      modoGeocodificacion === 'individual'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Alta Individual</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* MODO A: SUBIR ARCHIVO CSV / SCRAPER */}
+              {modoGeocodificacion === 'csv' && (
+                <div className="space-y-4">
+                  {/* Zona Drag & Drop */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingCsv(true);
+                    }}
+                    onDragLeave={() => setIsDraggingCsv(false)}
+                    onDrop={handleDropCsv}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer ${
+                      isDraggingCsv
+                        ? 'border-indigo-600 bg-indigo-50/70 scale-[0.99]'
+                        : 'border-slate-300 hover:border-indigo-400 bg-slate-50/60 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv,.tsv,.txt"
+                      onChange={handleSubirArchivoCsv}
+                      className="hidden"
+                    />
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center shadow-xs">
+                        <FileSpreadsheet className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-slate-800">
+                          {archivoCsvNombre ? `Archivo cargado: ${archivoCsvNombre}` : 'Arrastra aquí tu archivo CSV o haz clic para seleccionarlo'}
+                        </p>
+                        <p className="text-xs text-slate-500 max-w-lg mx-auto">
+                          Compatible con exportaciones de Google Maps Scrapers (Outscraper, Apify, Octoparse, Instant Data Scraper, Sheets o Excel).
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors pointer-events-none"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{archivoCsvNombre ? 'Cambiar archivo CSV' : 'Seleccionar Archivo CSV'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDescargarPlantillaCsv();
+                          }}
+                          className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Descargar Plantilla CSV</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Explicación Scrapers & Coordenadas */}
+                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-lg p-3.5 text-xs text-indigo-950 flex items-start gap-3">
+                    <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-bold text-indigo-900">¿Cómo procesa tus datos el importador inteligente?</p>
+                      <p className="text-indigo-800 leading-relaxed">
+                        • <strong>Con Coordenadas del Scraper:</strong> Si tu CSV ya contiene columnas de GPS (como <code>latitude, longitude, lat, lng</code>), se toman directamente con <strong>100% de precisión satelital</strong>.<br />
+                        • <strong>Sin Coordenadas GPS:</strong> Si tu archivo solo contiene direcciones físicas (ej. <code>"Juncal 510", "Av. Belgrano Sur 1400"</code>), el geocodificador nativo busca su ubicación exacta dentro de Santiago del Estero y La Banda.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Rubro por defecto si falta en el archivo */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-600">Rubro por defecto (si la fila no especifica uno):</span>
+                      <select
+                        value={categoriaLote}
+                        onChange={(e) => setCategoriaLote(e.target.value as GooglePlaceCategory)}
+                        className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-600 font-medium"
+                      >
+                        {CATEGORIAS_CONFIG.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Estadísticas de la importación */}
+                  {statsImportacion && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                        <div className="text-[11px] font-semibold text-emerald-800">Con Coordenadas GPS del Scraper</div>
+                        <div className="text-xl font-bold text-emerald-700">{statsImportacion.conGpsScraper}</div>
+                        <p className="text-[10px] text-emerald-600 font-medium">100% precisión satelital directa</p>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="text-[11px] font-semibold text-blue-800">Geocodificados por Dirección</div>
+                        <div className="text-xl font-bold text-blue-700">{statsImportacion.geocodificados}</div>
+                        <p className="text-[10px] text-blue-600 font-medium">Ubicados en radio Santiago / La Banda</p>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                        <div className="text-[11px] font-semibold text-slate-700">Omitidos / Inválidos</div>
+                        <div className="text-xl font-bold text-slate-600">{statsImportacion.omitidos}</div>
+                        <p className="text-[10px] text-slate-500 font-medium">Filas sin nombre o vacías</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* MODO B: CARGA POR LOTE */}
+              {modoGeocodificacion === 'lote' && (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <label className="font-semibold text-slate-700">
+                      Pega aquí tu lista de comercios y direcciones (una por línea):
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleInsertarEjemploLote}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline self-start sm:self-auto cursor-pointer"
+                    >
+                      Cargar 8 direcciones de ejemplo de Santiago
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <textarea
+                      rows={5}
+                      value={textoLote}
+                      onChange={(e) => setTextoLote(e.target.value)}
+                      placeholder={`Pega aquí texto separado por comas, punto y coma, tabulaciones o formato CSV completo:
+Supermercado Luque, Juncal 510, Supermercado
+Autoservicio Belgrano, Av. Belgrano Sur 1400, Autoservicio
+Farmacia Central, 24 de Septiembre 150, Farmacia
+Ferretería Colón, Av. Colón Sur 2100, Ferretería, -27.8105, -64.2725
+Corralón Solís, Av. Solís 450, Casa de Construcción`}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600 focus:bg-white transition-colors"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-600">Rubro por defecto:</span>
+                      <select
+                        value={categoriaLote}
+                        onChange={(e) => setCategoriaLote(e.target.value as GooglePlaceCategory)}
+                        className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-600"
+                      >
+                        {CATEGORIAS_CONFIG.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleGeocodificarLote}
+                      disabled={isGeocodingLote || !textoLote.trim()}
+                      className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isGeocodingLote ? 'animate-spin' : ''}`} />
+                      <span>{isGeocodingLote ? 'Procesando...' : '🔍 Procesar y Geocodificar'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Progreso de la geocodificación (común a CSV y Lote) */}
+              {(modoGeocodificacion === 'csv' || modoGeocodificacion === 'lote') && isGeocodingLote && geocodingProgress && (
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+                  <div className="flex justify-between text-xs font-semibold text-indigo-900">
+                    <span>Procesando direcciones en Santiago del Estero...</span>
+                    <span>{geocodingProgress.actual} de {geocodingProgress.total}</span>
+                  </div>
+                  <div className="w-full bg-indigo-200 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-indigo-600 h-2 transition-all duration-300"
+                      style={{
+                        width: `${Math.round((geocodingProgress.actual / Math.max(geocodingProgress.total, 1)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Resultados del Lote Geocodificado (común a CSV y Lote) */}
+              {(modoGeocodificacion === 'csv' || modoGeocodificacion === 'lote') && geocodedItems.length > 0 && (
+                <div className="border border-slate-200 rounded-lg overflow-hidden space-y-0">
+                  <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        {geocodedItems.length} Comercios Listos para Catálogo Maestro
+                      </span>
+                      {archivoCsvNombre && (
+                        <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-mono">
+                          {archivoCsvNombre}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGuardarGeocodificados}
+                      className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Guardar Todos en Catálogo Maestro</span>
+                    </button>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                    {geocodedItems.map((item, idx) => (
+                      <div key={idx} className="p-3 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-slate-50">
+                        <div className="space-y-0.5 flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-slate-900">{item.nombre}</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                              {getCategoryLabel(item.categoria)}
+                            </span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                              item.precision === 'gps_scraper'
+                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                : item.precision === 'exacta'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
+                              {item.precision === 'gps_scraper'
+                                ? '🛰️ GPS Scraper (100%)'
+                                : item.precision === 'exacta'
+                                ? '📍 Exacta'
+                                : '〰️ Aprox. Arteria'}
+                            </span>
+                            {item.origen && (
+                              <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                                {item.origen === 'scraper_csv' ? 'Origen: CSV Scraper' : item.origen === 'manual' ? 'Origen: Manual' : 'Origen: Geocodificado'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-slate-500 font-mono text-[11px] flex flex-wrap items-center gap-3">
+                            <span>📍 {item.direccion}</span>
+                            {item.telefono && (
+                              <span className="text-slate-600 font-sans">📞 {item.telefono}</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            Lat: {item.latitud.toFixed(6)} | Lng: {item.longitud.toFixed(6)}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarFilaGeocodificada(idx)}
+                          className="text-slate-400 hover:text-rose-600 p-1 self-end sm:self-center transition-colors cursor-pointer"
+                          title="Descartar de la lista"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* MODO B: ALTA INDIVIDUAL CON GEOCODER */}
+              {modoGeocodificacion === 'individual' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                        Nombre del Comercio
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej. Supermercado Vea Juncal"
+                        value={indivNombre}
+                        onChange={(e) => setIndivNombre(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                        Dirección en Santiago del Estero / La Banda
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej. Juncal 510 o Av. Belgrano Sur 1450"
+                        value={indivDireccion}
+                        onChange={(e) => setIndivDireccion(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                        Rubro Comercial
+                      </label>
+                      <select
+                        value={indivCategoria}
+                        onChange={(e) => setIndivCategoria(e.target.value as GooglePlaceCategory)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-600"
+                      >
+                        {CATEGORIAS_CONFIG.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGeocodificarIndividual}
+                      disabled={indivBuscando || !indivDireccion.trim()}
+                      className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <Search className={`w-3.5 h-3.5 ${indivBuscando ? 'animate-spin' : ''}`} />
+                      <span>{indivBuscando ? 'Localizando...' : 'Localizar Coordenadas'}</span>
+                    </button>
+                  </div>
+
+                  {indivResultado && (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="font-bold text-emerald-950">{indivResultado.nombre}</span>
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold">
+                            {indivResultado.precision === 'exacta' ? 'Ubicación Exacta' : 'Arteria / Cuadra'}
+                          </span>
+                        </div>
+                        <p className="text-emerald-800 font-mono text-[11px]">
+                          📍 {indivResultado.direccion}
+                        </p>
+                        <p className="text-emerald-700 font-mono text-[10px]">
+                          Latitud: {indivResultado.latitud} | Longitud: {indivResultado.longitud}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleGuardarIndividual}
+                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer shadow-xs"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Guardar en Catálogo Maestro</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Catálogo Maestro Actual con Buscador y Corrección Rápida */}
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
@@ -681,7 +1767,7 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
                     </span>
                   </div>
                   <p className="text-xs text-slate-500">
-                    Restringido exclusivamente a las coordenadas de Santiago del Estero y La Banda (radio 18 km).
+                    Restringido a Santiago del Estero y La Banda. Corrige coordenadas de comercios desfasados o agrégalos directamente.
                   </p>
                 </div>
                 <button
@@ -695,35 +1781,385 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
                 </button>
               </div>
 
+              {/* Barra de Filtros del Catálogo */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre o dirección..."
+                    value={busquedaCatalogo}
+                    onChange={(e) => setBusquedaCatalogo(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+                <div>
+                  <select
+                    value={filtroCatCatalogo}
+                    onChange={(e) => setFiltroCatCatalogo(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                  >
+                    <option value="todas">Todos los rubros</option>
+                    {CATEGORIAS_CONFIG.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {masterComercios.length === 0 ? (
                 <div className="p-12 text-center text-slate-400 text-xs">
-                  No hay comercios indexados. Ejecuta un sondeo o carga el padrón de muestra.
+                  No hay comercios indexados. Ejecuta un sondeo, pega tus direcciones arriba o carga el padrón de muestra.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
-                  {masterComercios.map((c) => (
-                    <div
-                      key={c.id_comercio_master || c.google_place_id}
-                      className="p-3.5 rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-xs font-bold text-slate-900 leading-tight">{c.nombre}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold shrink-0">
-                          {getCategoryLabel(c.categoria)}
-                        </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1">
+                  {masterComercios
+                    .filter((c) => {
+                      const matchTexto =
+                        !busquedaCatalogo.trim() ||
+                        c.nombre.toLowerCase().includes(busquedaCatalogo.toLowerCase()) ||
+                        (c.direccion && c.direccion.toLowerCase().includes(busquedaCatalogo.toLowerCase())) ||
+                        c.google_place_id.toLowerCase().includes(busquedaCatalogo.toLowerCase());
+                      const matchCat =
+                        filtroCatCatalogo === 'todas' || c.categoria === filtroCatCatalogo;
+                      return matchTexto && matchCat;
+                    })
+                    .map((c) => (
+                      <div
+                        key={c.id_comercio || c.id_comercio_master || c.google_place_id}
+                        className="p-3.5 rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors flex flex-col justify-between space-y-2"
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-900 leading-tight">
+                              {c.nombre}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold shrink-0">
+                              {getCategoryLabel(c.categoria)}
+                            </span>
+                          </div>
+
+                          {c.direccion && (
+                            <div className="mt-1 text-[11px] text-slate-600 flex items-center gap-1 font-sans">
+                              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{c.direccion}</span>
+                            </div>
+                          )}
+
+                          <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between font-mono">
+                            <span>Lat: {Number(c.latitud).toFixed(4)}</span>
+                            <span>Lng: {Number(c.longitud).toFixed(4)}</span>
+                          </div>
+                          <div className="mt-1 text-[10px] text-slate-400 font-mono truncate">
+                            ID: {c.google_place_id}
+                          </div>
+                        </div>
+
+                        {/* Botones de acción individual: Corregir o Eliminar */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => handleAbrirEditarComercio(c)}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Corregir Coordenadas</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarComercio(c)}
+                            className="text-xs text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer"
+                            title="Eliminar comercio erróneo"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between font-mono">
-                        <span>Lat: {Number(c.latitud).toFixed(4)}</span>
-                        <span>Lng: {Number(c.longitud).toFixed(4)}</span>
-                      </div>
-                      <div className="mt-1 text-[10px] text-slate-400 font-mono truncate">
-                        ID: {c.google_place_id}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </div>
+
+            {/* MODAL DE CORRECCIÓN DE COORDENADAS / DIRECCIÓN DE UN COMERCIO */}
+            {comercioEditando && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-slate-200 animate-in fade-in">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Edit3 className="w-4 h-4 text-blue-600" />
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Corregir Ubicación y Datos del Comercio
+                      </h4>
+                    </div>
+                    <button
+                      onClick={() => setComercioEditando(null)}
+                      className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                        Nombre del Comercio
+                      </label>
+                      <input
+                        type="text"
+                        value={editNombre}
+                        onChange={(e) => setEditNombre(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                        Dirección Física (Santiago del Estero / La Banda)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={editDireccion}
+                          onChange={(e) => setEditDireccion(e.target.value)}
+                          placeholder="Ej. Juncal 510 o Av. Belgrano Sur 1400"
+                          className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleRegeocodificarEdicion}
+                          disabled={editBuscandoCoordenadas || !editDireccion.trim()}
+                          className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold shrink-0 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Calcular latitud y longitud a partir de esta dirección"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${editBuscandoCoordenadas ? 'animate-spin' : ''}`} />
+                          <span>Re-geocodificar</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1">
+                          Latitud Exacta
+                        </label>
+                        <input
+                          type="number"
+                          step="0.000001"
+                          value={editLat}
+                          onChange={(e) => setEditLat(parseFloat(e.target.value))}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1">
+                          Longitud Exacta
+                        </label>
+                        <input
+                          type="number"
+                          step="0.000001"
+                          value={editLng}
+                          onChange={(e) => setEditLng(parseFloat(e.target.value))}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700 block mb-1">
+                        Rubro / Categoría
+                      </label>
+                      <select
+                        value={editCategoria}
+                        onChange={(e) => setEditCategoria(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                      >
+                        {CATEGORIAS_CONFIG.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setComercioEditando(null)}
+                      className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGuardarEdicionComercio}
+                      className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Guardar Coordenadas Corregidas
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL DE PRE-VALIDACIÓN DE PUNTOS DE REFERENCIA */}
+            {modalPrevalidarPuntos && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden animate-in fade-in">
+                  {/* Cabecera */}
+                  <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                        <Compass className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                          <span>Pre-validación de Puntos Estratégicos</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
+                            {PRESET_CENTROIDES.length} Puntos Notables
+                          </span>
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Revisa y corrobora la posición satelital de plazas y cruces clave antes de efectuar barridos.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModalPrevalidarPuntos(false)}
+                      className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Barra de Filtros y Búsqueda */}
+                  <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-3 items-center justify-between bg-white">
+                    <div className="flex flex-wrap gap-1.5">
+                      {['todos', 'Plazas y Centros Cívicos', 'Cruces de Avenidas Estratégicos', 'La Banda y Accesos'].map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setFiltroGrupoPuntos(g)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                            filtroGrupoPuntos === g
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {g === 'todos' ? 'Todos los Puntos' : g}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="relative w-full sm:w-64">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por plaza o avenida..."
+                        value={busquedaPunto}
+                        onChange={(e) => setBusquedaPunto(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Lista de Puntos */}
+                  <div className="p-6 overflow-y-auto space-y-3 flex-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {PRESET_CENTROIDES
+                        .filter((p) => {
+                          const matchGrupo = filtroGrupoPuntos === 'todos' || p.grupo === filtroGrupoPuntos;
+                          const matchText = !busquedaPunto.trim() || 
+                            p.nombre.toLowerCase().includes(busquedaPunto.toLowerCase()) || 
+                            p.detalle.toLowerCase().includes(busquedaPunto.toLowerCase());
+                          return matchGrupo && matchText;
+                        })
+                        .map((p) => {
+                          const isActivo = selectedCentroide.nombre === p.nombre;
+                          const esCopiado = puntoCopiado === p.nombre;
+                          return (
+                            <div
+                              key={p.nombre}
+                              className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
+                                isActivo
+                                  ? 'bg-blue-50/40 border-blue-300 ring-1 ring-blue-300'
+                                  : 'bg-white border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="space-y-1.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="text-xs font-bold text-slate-900">{p.nombre}</span>
+                                  <span className="text-[10px] px-2 py-0.5 rounded-md font-semibold shrink-0 bg-slate-100 text-slate-600 border border-slate-200">
+                                    {p.grupo.replace(' Estratégicos', '')}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 leading-relaxed">{p.detalle}</p>
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-100 space-y-2">
+                                <div className="flex items-center justify-between text-[11px] font-mono text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
+                                  <span>{p.lat.toFixed(6)}, {p.lng.toFixed(6)}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopiarCoordenadas(p.lat, p.lng, p.nombre)}
+                                    className="text-slate-400 hover:text-slate-700 transition-colors p-1 cursor-pointer"
+                                    title="Copiar coordenadas"
+                                  >
+                                    {esCopiado ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer text-center"
+                                    title="Comprobar en Google Maps"
+                                  >
+                                    <ExternalLink className="w-3 h-3 text-slate-500" />
+                                    <span>Ver en Google Maps</span>
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSeleccionarPuntoPrevalidado(p)}
+                                    className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                                      isActivo
+                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                    }`}
+                                  >
+                                    {isActivo ? 'Seleccionado' : 'Fijar para Sondeo'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Pie del modal con simulación de radio */}
+                  <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>
+                        Radio actual de barrido: <strong className="text-slate-900">{(radioMetros / 1000).toFixed(1)} km</strong> (~{((Math.PI * Math.pow(radioMetros / 1000, 2))).toFixed(1)} km² de cobertura por sondeo).
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModalPrevalidarPuntos(false)}
+                      className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer self-end sm:self-auto"
+                    >
+                      Cerrar Validador
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -934,9 +2370,30 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
         {adminTab === 'tenants' && (
           <div className="space-y-6">
             {tenantActionMsg && (
-              <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{tenantActionMsg}</span>
+              <div
+                className={`p-3.5 rounded-lg border text-xs flex items-center justify-between gap-2 animate-in fade-in ${
+                  tenantActionMsg.tipo === 'error'
+                    ? 'bg-red-50 border-red-200 text-red-800'
+                    : tenantActionMsg.tipo === 'info'
+                    ? 'bg-blue-50 border-blue-200 text-blue-800'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {tenantActionMsg.tipo === 'error' ? (
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  ) : (
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  )}
+                  <span className="font-medium">{tenantActionMsg.texto}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTenantActionMsg(null)}
+                  className="p-1 hover:opacity-75 cursor-pointer text-slate-500"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 
@@ -1072,21 +2529,26 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
 
                     <div className="flex items-center gap-2 shrink-0">
                       <button
-                        onClick={() => handleAsignarZonas(t.tenant_id)}
+                        type="button"
+                        onClick={() => handleAbrirModalAsignarZonas(t)}
                         disabled={assigningTenantId === t.tenant_id}
-                        className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                        className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-xs"
+                        title="Abrir selector interactivo de zonas para esta distribuidora"
                       >
-                        <Grid3X3 className="w-3.5 h-3.5 text-blue-600" />
+                        <Grid3X3 className="w-3.5 h-3.5" />
                         <span>
                           {assigningTenantId === t.tenant_id
                             ? 'Asignando...'
+                            : t.total_zonas && t.total_zonas > 0
+                            ? `Gestionar Zonas (${t.total_zonas})`
                             : 'Asignar Zonas'}
                         </span>
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => handleToggleTenant(t.tenant_id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                        className={`px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                           t.activa
                             ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
                             : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
@@ -1100,6 +2562,198 @@ export const SuperAdminPanel: React.FC<SuperAdminPanelProps> = () => {
                 ))}
               </div>
             </div>
+
+            {/* Modal Interactivo de Asignación de Zonas */}
+            {modalAsignarTenant && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                  {/* Header del Modal */}
+                  <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                        <Grid3X3 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900">
+                          Asignar Zonas Territoriales
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Distribuidora: <strong className="text-slate-800">{modalAsignarTenant.nombre_empresa}</strong> • Supervisor: <strong className="text-slate-800">{modalAsignarTenant.supervisor_email}</strong>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModalAsignarTenant(null)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Barra de control y filtros */}
+                  <div className="px-6 py-3.5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-700">
+                        {zonasSeleccionadasModal.length} de {zonasDisponiblesModal.length} zonas seleccionadas
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setZonasSeleccionadasModal(zonasDisponiblesModal.map((z) => z.codigo_zona))}
+                        className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium cursor-pointer transition-colors"
+                      >
+                        Seleccionar Todas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setZonasSeleccionadasModal([])}
+                        className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium cursor-pointer transition-colors"
+                      >
+                        Deseleccionar
+                      </button>
+                      <div className="h-4 w-px bg-slate-200 mx-1" />
+                      {/* Filtros por sector */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg">
+                        {['todos', 'CENTRO', 'SUR', 'NORTE', 'ESTE', 'OESTE'].map((sec) => (
+                          <button
+                            key={sec}
+                            type="button"
+                            onClick={() => setFiltroSectorModal(sec)}
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-semibold uppercase transition-colors cursor-pointer ${
+                              filtroSectorModal === sec
+                                ? 'bg-white text-blue-700 shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            {sec}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cuerpo scrollable con tarjetas de zonas */}
+                  <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {zonasDisponiblesModal
+                        .filter((z) => filtroSectorModal === 'todos' || z.sector.toUpperCase() === filtroSectorModal.toUpperCase())
+                        .map((z) => {
+                          const isChecked = zonasSeleccionadasModal.includes(z.codigo_zona);
+                          return (
+                            <div
+                              key={z.codigo_zona}
+                              onClick={() => handleToggleZonaModal(z.codigo_zona)}
+                              className={`p-3.5 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between gap-2 ${
+                                isChecked
+                                  ? 'bg-blue-50/70 border-blue-300 ring-1 ring-blue-500/30'
+                                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono text-xs font-bold text-slate-900">
+                                  {z.codigo_zona}
+                                </span>
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    z.sector === 'CENTRO'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : z.sector === 'SUR'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : z.sector === 'NORTE'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : z.sector === 'ESTE'
+                                      ? 'bg-purple-100 text-purple-800'
+                                      : 'bg-rose-100 text-rose-800'
+                                  }`}
+                                >
+                                  {z.sector}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100">
+                                <span className="text-[11px]">
+                                  {z.total_comercios || 20} comercios auditados
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {}}
+                                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    {/* Agregar zona manual */}
+                    <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-slate-500 font-medium">¿Deseas agregar una zona personalizada?</span>
+                      <input
+                        type="text"
+                        placeholder="Ej: SUR-03 o BANDA-02"
+                        value={nuevaZonaCustom}
+                        onChange={(e) => setNuevaZonaCustom(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAgregarZonaCustom();
+                          }
+                        }}
+                        className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 uppercase font-mono placeholder:text-slate-400 focus:outline-none focus:border-blue-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAgregarZonaCustom}
+                        disabled={!nuevaZonaCustom.trim()}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-lg disabled:opacity-40 cursor-pointer transition-colors"
+                      >
+                        + Agregar
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Footer con acciones */}
+                  <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={handleAsignarTodasDirectoModal}
+                      disabled={assigningTenantId === modalAsignarTenant.tenant_id}
+                      className="px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100/60 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Asignar Todas ({zonasDisponiblesModal.length}) Automáticamente</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setModalAsignarTenant(null)}
+                        className="px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmarAsignacionModal}
+                        disabled={assigningTenantId === modalAsignarTenant.tenant_id}
+                        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>
+                          {assigningTenantId === modalAsignarTenant.tenant_id
+                            ? 'Asignando...'
+                            : `Guardar y Confirmar (${zonasSeleccionadasModal.length} Zonas)`}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

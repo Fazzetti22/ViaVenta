@@ -1,5 +1,5 @@
 import { ComercioMaster } from '../types/auth';
-import { BarridoParams, BarridoResultItem, GoogleCloudQuotaStats, GooglePlaceCategory } from '../types/admin';
+import { BarridoParams, BarridoResultItem, GoogleCloudQuotaStats, GooglePlaceCategory, GeocodedAddressItem } from '../types/admin';
 import { supabase } from './supabaseClient';
 
 // Clave en LocalStorage para persistir el catálogo máster y los contadores en demo
@@ -659,6 +659,701 @@ export class GooglePlacesService {
       // noop
     }
   }
+
+  /**
+   * Geocodifica una dirección física individual restringiéndola estrictamente a
+   * la ciudad de Santiago del Estero o La Banda.
+   */
+  public async geocodificarDireccionSantiago(
+    direccion: string,
+    nombre?: string,
+    categoria?: GooglePlaceCategory
+  ): Promise<GeocodedAddressItem | null> {
+    const dirLimpia = direccion.trim();
+    if (!dirLimpia) return null;
+
+    // Detectar automáticamente la categoría si no fue especificada o es genérica
+    let catFinal: GooglePlaceCategory = categoria || 'store';
+    const textoAnalisis = `${nombre || ''} ${dirLimpia}`.toLowerCase();
+    if (
+      textoAnalisis.includes('super') ||
+      textoAnalisis.includes('vea') ||
+      textoAnalisis.includes('mayorista') ||
+      textoAnalisis.includes('autoservicio') ||
+      textoAnalisis.includes('changomas') ||
+      textoAnalisis.includes('luque')
+    ) {
+      catFinal = 'grocery_or_supermarket';
+    } else if (
+      textoAnalisis.includes('farmacia') ||
+      textoAnalisis.includes('drogueria') ||
+      textoAnalisis.includes('medic')
+    ) {
+      catFinal = 'pharmacy';
+    } else if (
+      textoAnalisis.includes('ferreteria') ||
+      textoAnalisis.includes('buloneria') ||
+      textoAnalisis.includes('pintureria') ||
+      textoAnalisis.includes('bulon')
+    ) {
+      catFinal = 'hardware_store';
+    } else if (
+      textoAnalisis.includes('almacen') ||
+      textoAnalisis.includes('despensa') ||
+      textoAnalisis.includes('kiosco') ||
+      textoAnalisis.includes('minimercado')
+    ) {
+      catFinal = 'convenience_store';
+    } else if (
+      textoAnalisis.includes('corralon') ||
+      textoAnalisis.includes('materiales')
+    ) {
+      catFinal = 'construction_store';
+    } else if (
+      textoAnalisis.includes('abogado') ||
+      textoAnalisis.includes('estudio juridico')
+    ) {
+      catFinal = 'lawyer';
+    } else if (
+      textoAnalisis.includes('contador') ||
+      textoAnalisis.includes('estudio contable')
+    ) {
+      catFinal = 'accounting';
+    } else if (
+      textoAnalisis.includes('imprenta') ||
+      textoAnalisis.includes('fotocopiadora') ||
+      textoAnalisis.includes('grafica')
+    ) {
+      catFinal = 'print_shop';
+    }
+
+    const nombreFinal = nombre && nombre.trim() ? nombre.trim() : `Comercio en ${dirLimpia}`;
+
+    // Contexto explícito de Santiago del Estero o La Banda
+    const esLaBanda = dirLimpia.toLowerCase().includes('la banda') || dirLimpia.toLowerCase().includes('banda');
+    const localidadContexto = esLaBanda ? 'La Banda, Santiago del Estero, Argentina' : 'Santiago del Estero, Argentina';
+
+    const minLng = SANTIAGO_DEL_ESTERO_BOUNDS.minLng;
+    const maxLat = SANTIAGO_DEL_ESTERO_BOUNDS.maxLat;
+    const maxLng = SANTIAGO_DEL_ESTERO_BOUNDS.maxLng;
+    const minLat = SANTIAGO_DEL_ESTERO_BOUNDS.minLat;
+    const viewbox = `${minLng.toFixed(4)},${maxLat.toFixed(4)},${maxLng.toFixed(4)},${minLat.toFixed(4)}`;
+
+    // 1. Intentar consulta geográfica a Nominatim
+    try {
+      const query = `${dirLimpia}, ${localidadContexto}`;
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&viewbox=${viewbox}&bounded=1&format=json&addressdetails=1&limit=3`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'DistribuidoraSaaS/1.0 (geocodificador-santiago-del-estero)' },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          for (const item of data) {
+            const lat = parseFloat(item.lat);
+            const lon = parseFloat(item.lon);
+            if (this.perteneceASantiagoDelEstero(lat, lon)) {
+              const tieneNumero = Boolean(item.address?.house_number);
+              return {
+                nombre: nombreFinal,
+                direccion: dirLimpia,
+                categoria: catFinal,
+                latitud: parseFloat(lat.toFixed(6)),
+                longitud: parseFloat(lon.toFixed(6)),
+                precision: tieneNumero ? 'exacta' : 'arteria_aproximada',
+                detallesGeocodificacion: item.display_name,
+                seleccionado: true,
+              };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Consulta geocoding Nominatim falló:', e);
+    }
+
+    // 2. Fallback inteligente de arterias y alturas conocidas de Santiago del Estero
+    const matchGeoFallback = this.calcularCoordenadaFallbackSantiago(dirLimpia, esLaBanda);
+    if (matchGeoFallback) {
+      return {
+        nombre: nombreFinal,
+        direccion: dirLimpia,
+        categoria: catFinal,
+        latitud: matchGeoFallback.lat,
+        longitud: matchGeoFallback.lng,
+        precision: matchGeoFallback.precision,
+        detallesGeocodificacion: matchGeoFallback.descripcion,
+        seleccionado: true,
+      };
+    }
+
+    // 3. Posicionamiento por centroide urbano de referencia
+    return {
+      nombre: nombreFinal,
+      direccion: dirLimpia,
+      categoria: catFinal,
+      latitud: -27.7880,
+      longitud: -64.2610,
+      precision: 'centroide_estimado',
+      detallesGeocodificacion: 'Santiago del Estero Centro (coordenada aproximada)',
+      seleccionado: true,
+    };
+  }
+
+  /**
+   * Cálculo de coordenadas geográficas de respaldo para arterias y alturas de Santiago del Estero
+   */
+  private calcularCoordenadaFallbackSantiago(
+    direccion: string,
+    esLaBanda: boolean
+  ): { lat: number; lng: number; precision: 'exacta' | 'arteria_aproximada'; descripcion: string } | null {
+    const d = direccion.toLowerCase();
+
+    // Extraer número de puerta si existe
+    const numMatch = d.match(/\b(\d{1,5})\b/);
+    const altura = numMatch ? parseInt(numMatch[1], 10) : null;
+
+    if (esLaBanda) {
+      if (d.includes('españa')) {
+        return { lat: -27.7380, lng: -64.2510, precision: 'arteria_aproximada', descripcion: 'Av. España, La Banda Centro' };
+      }
+      if (d.includes('san martin')) {
+        return { lat: -27.7385, lng: -64.2470, precision: 'arteria_aproximada', descripcion: 'San Martín, La Banda Centro' };
+      }
+      if (d.includes('alem')) {
+        return { lat: -27.7395, lng: -64.2485, precision: 'arteria_aproximada', descripcion: 'Leandro N. Alem, La Banda' };
+      }
+      if (d.includes('besares')) {
+        return { lat: -27.7330, lng: -64.2440, precision: 'arteria_aproximada', descripcion: 'Av. Besares, La Banda' };
+      }
+      return { lat: -27.7350, lng: -64.2460, precision: 'arteria_aproximada', descripcion: 'La Banda Centro Urbano' };
+    }
+
+    // Arterias de Santiago del Estero Capital
+    if (d.includes('belgrano')) {
+      if (d.includes('norte')) {
+        const alt = altura || 500;
+        const offset = Math.min(alt / 1000, 3) * 0.010;
+        return {
+          lat: parseFloat((-27.7880 + offset).toFixed(6)),
+          lng: -64.2612,
+          precision: altura ? 'exacta' : 'arteria_aproximada',
+          descripcion: `Av. Belgrano Norte ${altura || ''}, Santiago del Estero`,
+        };
+      } else {
+        // Belgrano Sur (va de 0 en Rivadavia hacia el sur hasta 4500)
+        const alt = altura || 1000;
+        const offset = (alt / 1000) * 0.0105;
+        return {
+          lat: parseFloat((-27.7880 - offset).toFixed(6)),
+          lng: parseFloat((-64.2610 - (alt / 1000) * 0.0003).toFixed(6)),
+          precision: altura ? 'exacta' : 'arteria_aproximada',
+          descripcion: `Av. Belgrano Sur ${altura || ''}, Santiago del Estero`,
+        };
+      }
+    }
+
+    if (d.includes('moreno')) {
+      const alt = altura || 800;
+      const offset = (alt / 1000) * 0.0105;
+      const isSur = !d.includes('norte');
+      const lat = isSur ? -27.7880 - offset : -27.7880 + offset;
+      return {
+        lat: parseFloat(lat.toFixed(6)),
+        lng: -64.2660,
+        precision: altura ? 'exacta' : 'arteria_aproximada',
+        descripcion: `Av. Moreno ${isSur ? 'Sur' : 'Norte'} ${altura || ''}, Santiago del Estero`,
+      };
+    }
+
+    if (d.includes('colon') || d.includes('colón')) {
+      const alt = altura || 800;
+      const offset = (alt / 1000) * 0.0105;
+      const isSur = !d.includes('norte');
+      const lat = isSur ? -27.7880 - offset : -27.7880 + offset;
+      return {
+        lat: parseFloat(lat.toFixed(6)),
+        lng: -64.2720,
+        precision: altura ? 'exacta' : 'arteria_aproximada',
+        descripcion: `Av. Colón ${isSur ? 'Sur' : 'Norte'} ${altura || ''}, Santiago del Estero`,
+      };
+    }
+
+    if (d.includes('rivadavia')) {
+      const alt = altura || 400;
+      const offsetLng = (alt / 1000) * 0.009;
+      return {
+        lat: -27.7860,
+        lng: parseFloat((-64.2610 - offsetLng).toFixed(6)),
+        precision: altura ? 'exacta' : 'arteria_aproximada',
+        descripcion: `Av. Rivadavia ${altura || ''}, Santiago del Estero`,
+      };
+    }
+
+    if (d.includes('libertad')) {
+      const alt = altura || 500;
+      const offsetLng = (alt / 1000) * 0.009;
+      return {
+        lat: -27.7880,
+        lng: parseFloat((-64.2610 - offsetLng).toFixed(6)),
+        precision: altura ? 'exacta' : 'arteria_aproximada',
+        descripcion: `Av. Libertad ${altura || ''}, Santiago del Estero`,
+      };
+    }
+
+    if (d.includes('solis') || d.includes('solís')) {
+      const alt = altura || 800;
+      const offsetLng = (alt / 1000) * 0.008;
+      return {
+        lat: -27.8105,
+        lng: parseFloat((-64.2610 + (alt > 1000 ? -offsetLng : offsetLng)).toFixed(6)),
+        precision: altura ? 'exacta' : 'arteria_aproximada',
+        descripcion: `Av. Solís ${altura || ''}, Santiago del Estero`,
+      };
+    }
+
+    if (d.includes('juncal')) {
+      return { lat: -27.8076, lng: -64.2429, precision: 'exacta', descripcion: 'Juncal, Barrio Belgrano' };
+    }
+
+    if (d.includes('independencia')) {
+      const alt = altura || 600;
+      return {
+        lat: parseFloat((-27.7925 - (alt / 1000) * 0.008).toFixed(6)),
+        lng: -64.2540,
+        precision: 'arteria_aproximada',
+        descripcion: `Independencia ${altura || ''}, Santiago del Estero`,
+      };
+    }
+
+    if (d.includes('olaechea') || d.includes('parque aguirre')) {
+      return { lat: -27.7910, lng: -64.2480, precision: 'arteria_aproximada', descripcion: 'Parque Aguirre / Olaechea' };
+    }
+
+    if (d.includes('autonomia') || d.includes('autonomía')) {
+      return { lat: -27.8090, lng: -64.3037, precision: 'arteria_aproximada', descripcion: 'Barrio Autonomía, Santiago del Estero' };
+    }
+
+    if (d.includes('cabildo')) {
+      return { lat: -27.8120, lng: -64.2540, precision: 'arteria_aproximada', descripcion: 'Barrio Cabildo, Santiago del Estero' };
+    }
+
+    if (d.includes('alberdi')) {
+      return { lat: -27.7820, lng: -64.2710, precision: 'arteria_aproximada', descripcion: 'Barrio Alberdi, Santiago del Estero' };
+    }
+
+    return null;
+  }
+
+  /**
+   * Parsea una línea de CSV respetando comillas y delimitadores
+   */
+  private parsearLineaCsv(linea: string, delimitador: string = ','): string[] {
+    const columnas: string[] = [];
+    let actual = '';
+    let dentroDeComillas = false;
+
+    for (let i = 0; i < linea.length; i++) {
+      const c = linea[i];
+      if (c === '"') {
+        if (dentroDeComillas && linea[i + 1] === '"') {
+          actual += '"';
+          i++;
+        } else {
+          dentroDeComillas = !dentroDeComillas;
+        }
+      } else if (c === delimitador && !dentroDeComillas) {
+        columnas.push(actual.trim());
+        actual = '';
+      } else {
+        actual += c;
+      }
+    }
+    columnas.push(actual.trim());
+    return columnas;
+  }
+
+  /**
+   * Procesa un archivo CSV o texto tabulado/pegado proveniente de herramientas de
+   * scraping de Google Maps (Outscraper, Apify, Octoparse, etc.) o planillas Excel/Sheets.
+   * Si el CSV ya incluye latitud y longitud, las adopta directamente con precisión GPS,
+   * y si faltan, ejecuta el geocodificador urbano de Santiago del Estero.
+   */
+  public async procesarCsvOTextoScraper(
+    contenido: string,
+    defaultCategoria: GooglePlaceCategory = 'store',
+    onProgress?: (actual: number, total: number) => void
+  ): Promise<{
+    items: GeocodedAddressItem[];
+    conGpsScraper: number;
+    geocodificados: number;
+    omitidos: number;
+  }> {
+    const lineas = contenido
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'));
+
+    if (lineas.length === 0) {
+      return { items: [], conGpsScraper: 0, geocodificados: 0, omitidos: 0 };
+    }
+
+    // 1. Detección del delimitador (coma, punto y coma, tabulador)
+    const primeraMuestra = lineas.slice(0, 3).join('\n');
+    const conteoPuntoYComa = (primeraMuestra.match(/;/g) || []).length;
+    const conteoTab = (primeraMuestra.match(/\t/g) || []).length;
+    const conteoComa = (primeraMuestra.match(/,/g) || []).length;
+
+    let delimitador = ',';
+    if (conteoTab > conteoComa && conteoTab > conteoPuntoYComa) {
+      delimitador = '\t';
+    } else if (conteoPuntoYComa > conteoComa) {
+      delimitador = ';';
+    }
+
+    // 2. Detección de encabezados
+    const primeraFila = this.parsearLineaCsv(lineas[0], delimitador);
+    const primeraFilaNormalizada = primeraFila.map((c) =>
+      c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+    );
+
+    let nombreIdx = -1;
+    let direccionIdx = -1;
+    let latIdx = -1;
+    let lngIdx = -1;
+    let categoriaIdx = -1;
+    let telefonoIdx = -1;
+
+    let tieneEncabezados = false;
+
+    // Buscar nombres de columnas comunes en scrapers de Google Maps
+    primeraFilaNormalizada.forEach((col, idx) => {
+      if (
+        col.includes('name') ||
+        col.includes('nombre') ||
+        col.includes('title') ||
+        col.includes('comercio') ||
+        col.includes('business') ||
+        col.includes('company') ||
+        col.includes('local')
+      ) {
+        if (nombreIdx === -1) nombreIdx = idx;
+        tieneEncabezados = true;
+      } else if (
+        col.includes('address') ||
+        col.includes('direccion') ||
+        col.includes('calle') ||
+        col.includes('street') ||
+        col.includes('ubicacion') ||
+        col.includes('formatted_address')
+      ) {
+        if (direccionIdx === -1) direccionIdx = idx;
+        tieneEncabezados = true;
+      } else if (
+        col === 'lat' ||
+        col === 'latitude' ||
+        col === 'latitud' ||
+        col.includes('geo_lat') ||
+        col === 'y'
+      ) {
+        latIdx = idx;
+        tieneEncabezados = true;
+      } else if (
+        col === 'lng' ||
+        col === 'lon' ||
+        col === 'longitude' ||
+        col === 'longitud' ||
+        col.includes('geo_lng') ||
+        col === 'x'
+      ) {
+        lngIdx = idx;
+        tieneEncabezados = true;
+      } else if (
+        col.includes('category') ||
+        col.includes('categoria') ||
+        col.includes('type') ||
+        col.includes('rubro')
+      ) {
+        categoriaIdx = idx;
+        tieneEncabezados = true;
+      } else if (
+        col.includes('phone') ||
+        col.includes('telefono') ||
+        col.includes('celular') ||
+        col.includes('tel')
+      ) {
+        telefonoIdx = idx;
+        tieneEncabezados = true;
+      }
+    });
+
+    const filasDatos = tieneEncabezados ? lineas.slice(1) : lineas;
+    const total = filasDatos.length;
+    const items: GeocodedAddressItem[] = [];
+    let conGpsScraper = 0;
+    let geocodificados = 0;
+    let omitidos = 0;
+
+    for (let i = 0; i < total; i++) {
+      const cols = this.parsearLineaCsv(filasDatos[i], delimitador);
+      if (cols.length === 0 || cols.every((c) => !c)) {
+        omitidos++;
+        continue;
+      }
+
+      let nombre = '';
+      let direccion = '';
+      let cat: GooglePlaceCategory = defaultCategoria;
+      let rawLat: number | null = null;
+      let rawLng: number | null = null;
+      let telefono: string | undefined = undefined;
+
+      if (tieneEncabezados) {
+        if (nombreIdx !== -1 && cols[nombreIdx]) nombre = cols[nombreIdx];
+        if (direccionIdx !== -1 && cols[direccionIdx]) direccion = cols[direccionIdx];
+        if (latIdx !== -1 && cols[latIdx]) {
+          const parsed = parseFloat(cols[latIdx].replace(',', '.'));
+          if (!isNaN(parsed)) rawLat = parsed;
+        }
+        if (lngIdx !== -1 && cols[lngIdx]) {
+          const parsed = parseFloat(cols[lngIdx].replace(',', '.'));
+          if (!isNaN(parsed)) rawLng = parsed;
+        }
+        if (categoriaIdx !== -1 && cols[categoriaIdx]) {
+          const c = cols[categoriaIdx].toLowerCase();
+          if (c.includes('super') || c.includes('auto')) cat = 'grocery_or_supermarket';
+          else if (c.includes('farm') || c.includes('medic')) cat = 'pharmacy';
+          else if (c.includes('ferr') || c.includes('bulon')) cat = 'hardware_store';
+          else if (c.includes('alm') || c.includes('kios') || c.includes('desp')) cat = 'convenience_store';
+          else if (c.includes('corr') || c.includes('material')) cat = 'construction_store';
+          else if (c.includes('abog') || c.includes('jurid')) cat = 'lawyer';
+          else if (c.includes('cont') || c.includes('estudio')) cat = 'accounting';
+          else if (c.includes('impr') || c.includes('graf') || c.includes('copi')) cat = 'print_shop';
+        }
+        if (telefonoIdx !== -1 && cols[telefonoIdx]) {
+          telefono = cols[telefonoIdx];
+        }
+      } else {
+        // Formato posicional libre:
+        // Caso 1: Nombre, Dirección, Categoría, Lat, Lng
+        // Caso 2: Nombre, Dirección, Categoría
+        // Caso 3: Nombre, Dirección
+        // Caso 4: Solo Dirección
+        if (cols.length >= 2) {
+          nombre = cols[0];
+          direccion = cols[1];
+          if (cols.length >= 3 && cols[2]) {
+            const pos2 = cols[2].trim().toLowerCase();
+            if (pos2.includes('super')) cat = 'grocery_or_supermarket';
+            else if (pos2.includes('farm')) cat = 'pharmacy';
+            else if (pos2.includes('ferr')) cat = 'hardware_store';
+            else if (pos2.includes('alm') || pos2.includes('kios')) cat = 'convenience_store';
+            else if (pos2.includes('corr')) cat = 'construction_store';
+          }
+          if (cols.length >= 5) {
+            const pLat = parseFloat(cols[3].replace(',', '.'));
+            const pLng = parseFloat(cols[4].replace(',', '.'));
+            if (!isNaN(pLat) && !isNaN(pLng)) {
+              rawLat = pLat;
+              rawLng = pLng;
+            }
+          }
+        } else {
+          direccion = cols[0];
+          nombre = `Comercio ${i + 1}`;
+        }
+      }
+
+      if (!nombre && !direccion) {
+        omitidos++;
+        continue;
+      }
+      if (!nombre) {
+        nombre = `Comercio en ${direccion}`;
+      }
+
+      // CASO A: El scraper de Google Maps YA incluye coordenadas de GPS
+      if (
+        rawLat !== null &&
+        rawLng !== null &&
+        rawLat < -25.0 &&
+        rawLat > -30.0 &&
+        rawLng < -62.0 &&
+        rawLng > -66.0
+      ) {
+        items.push({
+          nombre: nombre.trim(),
+          direccion: direccion.trim() || 'Dirección obtenida de Google Maps',
+          categoria: cat,
+          latitud: parseFloat(rawLat.toFixed(6)),
+          longitud: parseFloat(rawLng.toFixed(6)),
+          precision: 'exacta',
+          detallesGeocodificacion: 'Coordenadas GPS de Scraper Google Maps',
+          telefono,
+          seleccionado: true,
+          origen: 'scraper_csv',
+        });
+        conGpsScraper++;
+      } else if (direccion) {
+        // CASO B: El scraper o planilla solo trajo direcciones -> Geocodificar en Santiago del Estero
+        const geo = await this.geocodificarDireccionSantiago(direccion, nombre, cat);
+        if (geo) {
+          items.push({
+            ...geo,
+            telefono,
+            origen: 'geocodificado',
+          });
+          geocodificados++;
+        } else {
+          omitidos++;
+        }
+        // Retardo pequeño solo si hace consulta HTTP externa
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } else {
+        omitidos++;
+      }
+
+      if (onProgress) {
+        onProgress(i + 1, total);
+      }
+    }
+
+    return {
+      items,
+      conGpsScraper,
+      geocodificados,
+      omitidos,
+    };
+  }
+
+  /**
+   * Geocodificación por Lotes (Batch) de un texto multilínea
+   * Permite pegar múltiples comercios y sus direcciones a la vez.
+   */
+  public async geocodificarLoteDirecciones(
+    textoLote: string,
+    defaultCategoria: GooglePlaceCategory = 'store',
+    onProgress?: (actual: number, total: number) => void
+  ): Promise<GeocodedAddressItem[]> {
+    const res = await this.procesarCsvOTextoScraper(textoLote, defaultCategoria, onProgress);
+    return res.items;
+  }
+
+  /**
+   * Guarda una lista de comercios geocodificados manualmente en el catálogo máster
+   * persistiendo en Supabase y en LocalStorage.
+   */
+  public async guardarComerciosGeocodificados(
+    items: GeocodedAddressItem[]
+  ): Promise<{ agregados: number; yaExistentes: number }> {
+    const existentes = await this.getExistingComerciosMaster();
+    const existingNombres = new Set(existentes.map((e) => e.nombre.toLowerCase().trim()));
+
+    const toInsert: ComercioMaster[] = [];
+    let yaExistentes = 0;
+
+    for (const item of items) {
+      if (existingNombres.has(item.nombre.toLowerCase().trim())) {
+        yaExistentes++;
+        continue;
+      }
+
+      const idComm = `comm_manual_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const googlePlaceId = `manual_geo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+      toInsert.push({
+        id_comercio: idComm,
+        google_place_id: googlePlaceId,
+        nombre: item.nombre,
+        categoria: item.categoria,
+        latitud: item.latitud,
+        longitud: item.longitud,
+        direccion: item.direccion,
+      });
+      existingNombres.add(item.nombre.toLowerCase().trim());
+    }
+
+    if (toInsert.length > 0) {
+      const merged = [...existentes, ...toInsert];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MASTER, JSON.stringify(merged));
+      }
+      try {
+        await supabase.from('comercios_master').insert(toInsert);
+      } catch (e) {
+        console.warn('Error insertando comercios geocodificados en Supabase:', e);
+      }
+    }
+
+    return { agregados: toInsert.length, yaExistentes };
+  }
+
+  /**
+   * Actualiza los datos o coordenadas de un comercio existente en comercios_master
+   */
+  public async actualizarComercioMaster(
+    idComercio: string,
+    updates: Partial<ComercioMaster>
+  ): Promise<boolean> {
+    const existentes = await this.getExistingComerciosMaster();
+    const idx = existentes.findIndex(
+      (c) => c.id_comercio === idComercio || c.google_place_id === idComercio
+    );
+    if (idx === -1) return false;
+
+    existentes[idx] = {
+      ...existentes[idx],
+      ...updates,
+    };
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_MASTER, JSON.stringify(existentes));
+    }
+
+    try {
+      await supabase
+        .from('comercios_master')
+        .update({
+          nombre: existentes[idx].nombre,
+          categoria: existentes[idx].categoria,
+          latitud: existentes[idx].latitud,
+          longitud: existentes[idx].longitud,
+          direccion: existentes[idx].direccion,
+        })
+        .or(`id_comercio.eq.${idComercio},google_place_id.eq.${idComercio}`);
+    } catch {
+      // noop
+    }
+
+    return true;
+  }
+
+  /**
+   * Elimina un comercio erróneo individual del catálogo máster
+   */
+  public async eliminarComercioMaster(idComercio: string): Promise<boolean> {
+    const existentes = await this.getExistingComerciosMaster();
+    const filtrados = existentes.filter(
+      (c) => c.id_comercio !== idComercio && c.google_place_id !== idComercio
+    );
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_MASTER, JSON.stringify(filtrados));
+    }
+
+    try {
+      await supabase
+        .from('comercios_master')
+        .delete()
+        .or(`id_comercio.eq.${idComercio},google_place_id.eq.${idComercio}`);
+    } catch {
+      // noop
+    }
+
+    return true;
+  }
 }
 
 export const googlePlacesService = GooglePlacesService.getInstance();
+

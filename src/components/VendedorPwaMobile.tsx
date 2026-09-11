@@ -52,6 +52,7 @@ import {
   TicketCompraPayload 
 } from '../services/whatsappService';
 import { sessionManager } from '../services/sessionManager';
+import { googlePlacesService } from '../services/googlePlacesService';
 
 // Iconos táctiles personalizados con la paleta oficial de ViaVenta para Leaflet
 const createLeafletIcon = (estado: ComercioRuta['estado_visita'], index: number, isSelected: boolean = false) => {
@@ -134,6 +135,7 @@ export const VendedorPwaMobile: React.FC = () => {
   const [nuevoLat, setNuevoLat] = useState<string>('-27.8080');
   const [nuevoLng, setNuevoLng] = useState<string>('-64.2610');
   const [obteniendoGps, setObteniendoGps] = useState(false);
+  const [localizandoDireccion, setLocalizandoDireccion] = useState(false);
   const [gpsObtenidoExito, setGpsObtenidoExito] = useState(false);
   const [mensajeExitoAlta, setMensajeExitoAlta] = useState<string | null>(null);
   const [errorAlta, setErrorAlta] = useState<string | null>(null);
@@ -352,6 +354,36 @@ export const VendedorPwaMobile: React.FC = () => {
       },
       { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
     );
+  };
+
+  // Manejador para geocodificar por dirección física en Santiago del Estero
+  const handleLocalizarPorDireccion = async () => {
+    if (!nuevoDireccion.trim()) {
+      setErrorAlta('Escribe primero la dirección para buscar sus coordenadas.');
+      return;
+    }
+    setLocalizandoDireccion(true);
+    setErrorAlta(null);
+    setGpsObtenidoExito(false);
+
+    try {
+      const geo = await googlePlacesService.geocodificarDireccionSantiago(
+        nuevoDireccion,
+        nuevoNombre || undefined,
+        nuevoCategoria as any
+      );
+      if (geo) {
+        setNuevoLat(geo.latitud.toString());
+        setNuevoLng(geo.longitud.toString());
+        setGpsObtenidoExito(true);
+      } else {
+        setErrorAlta('No se encontró la dirección en Santiago del Estero. Puedes ingresar o ajustar las coordenadas manualmente.');
+      }
+    } catch {
+      setErrorAlta('Hubo un error al buscar la dirección.');
+    } finally {
+      setLocalizandoDireccion(false);
+    }
   };
 
   // Manejador para dar de alta el nuevo comercio y actualizar el mapa
@@ -1309,31 +1341,53 @@ export const VendedorPwaMobile: React.FC = () => {
                 </div>
               </div>
 
-              {/* Localización Geográfica GPS para el Mapa */}
+              {/* Localización Geográfica GPS o Dirección para el Mapa */}
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-1.5 flex-wrap">
                   <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <Crosshair className="w-3.5 h-3.5 text-blue-600" />
                     <span>Ubicación en el Mapa</span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleCapturarGps}
-                    disabled={obteniendoGps}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200 transition-colors disabled:opacity-50"
-                  >
-                    {obteniendoGps ? (
-                      <>
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                        <span>Capturando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Navigation className="w-3 h-3" />
-                        <span>Obtener mi GPS</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleLocalizarPorDireccion}
+                      disabled={localizandoDireccion || !nuevoDireccion.trim()}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-200 transition-colors disabled:opacity-50 cursor-pointer"
+                      title="Calcular latitud y longitud a partir de la calle y altura"
+                    >
+                      {localizandoDireccion ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Localizando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-3 h-3" />
+                          <span>Por Dirección</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCapturarGps}
+                      disabled={obteniendoGps}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200 transition-colors disabled:opacity-50 cursor-pointer"
+                      title="Obtener coordenadas GPS actuales de mi teléfono"
+                    >
+                      {obteniendoGps ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>GPS...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Navigation className="w-3 h-3" />
+                          <span>Mi GPS</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {gpsObtenidoExito && (

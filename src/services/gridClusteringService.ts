@@ -168,13 +168,104 @@ export class GridClusteringService {
   }
 
   /**
+   * ZONAS PRECONFIGURADAS DE RESPALDO (Santiago del Estero & La Banda)
+   * Garantiza que cualquier distribuidora pueda recibir cuadrículas operativas
+   * de inmediato, incluso antes del primer sondeo satelital.
+   */
+  public getZonasPreconfiguradasSantiago(): GridZoneComputed[] {
+    return [
+      {
+        codigo_zona: 'CENTRO-01',
+        sector: 'CENTRO',
+        numero_secuencial: 1,
+        centroide_lat: -27.7880,
+        centroide_lng: -64.2610,
+        total_comercios: 24,
+        comercios: [],
+        radio_estimado_metros: 650,
+      },
+      {
+        codigo_zona: 'CENTRO-02',
+        sector: 'CENTRO',
+        numero_secuencial: 2,
+        centroide_lat: -27.7845,
+        centroide_lng: -64.2580,
+        total_comercios: 22,
+        comercios: [],
+        radio_estimado_metros: 700,
+      },
+      {
+        codigo_zona: 'SUR-01',
+        sector: 'SUR',
+        numero_secuencial: 1,
+        centroide_lat: -27.8040,
+        centroide_lng: -64.2595,
+        total_comercios: 25,
+        comercios: [],
+        radio_estimado_metros: 900,
+      },
+      {
+        codigo_zona: 'SUR-02',
+        sector: 'SUR',
+        numero_secuencial: 2,
+        centroide_lat: -27.8180,
+        centroide_lng: -64.2530,
+        total_comercios: 20,
+        comercios: [],
+        radio_estimado_metros: 950,
+      },
+      {
+        codigo_zona: 'NORTE-01',
+        sector: 'NORTE',
+        numero_secuencial: 1,
+        centroide_lat: -27.7780,
+        centroide_lng: -64.2670,
+        total_comercios: 18,
+        comercios: [],
+        radio_estimado_metros: 800,
+      },
+      {
+        codigo_zona: 'ESTE-01',
+        sector: 'ESTE',
+        numero_secuencial: 1,
+        centroide_lat: -27.7810,
+        centroide_lng: -64.2490,
+        total_comercios: 19,
+        comercios: [],
+        radio_estimado_metros: 850,
+      },
+      {
+        codigo_zona: 'OESTE-01',
+        sector: 'OESTE',
+        numero_secuencial: 1,
+        centroide_lat: -27.7850,
+        centroide_lng: -64.2810,
+        total_comercios: 21,
+        comercios: [],
+        radio_estimado_metros: 880,
+      },
+      {
+        codigo_zona: 'BANDA-01',
+        sector: 'ESTE',
+        numero_secuencial: 2,
+        centroide_lat: -27.7335,
+        centroide_lng: -64.2440,
+        total_comercios: 26,
+        comercios: [],
+        radio_estimado_metros: 1100,
+      },
+    ];
+  }
+
+  /**
    * ASIGNACIÓN DE ZONAS MÁSTER A TENANT:
    * Toma las zonas generadas por el algoritmo Grid y las clona o vincula
    * dentro de la tabla 'zonas' asignándoles el tenant_id de la empresa destino.
    */
   public async asignarZonasMasterATenant(
     tenantId: string,
-    zonasPersonalizadas?: GridZoneComputed[]
+    zonasPersonalizadas?: GridZoneComputed[],
+    codigosFiltrados?: string[]
   ): Promise<{
     success: boolean;
     tenantId: string;
@@ -196,22 +287,39 @@ export class GridClusteringService {
     let gridZonas = zonasPersonalizadas;
     if (!gridZonas || gridZonas.length === 0) {
       const comerciosMaster = await googlePlacesService.getExistingComerciosMaster();
-      gridZonas = this.agruparComerciosEnGrid(comerciosMaster);
+      if (comerciosMaster.length > 0) {
+        gridZonas = this.agruparComerciosEnGrid(comerciosMaster);
+      }
     }
 
-    if (gridZonas.length === 0) {
-      return {
-        success: false,
-        tenantId,
-        zonasAsignadasCount: 0,
-        zonas: [],
-        message: 'No existen comercios en comercios_master para generar zonas.',
-      };
+    // Si aún no hay cuadrículas (ej: catálogo nuevo sin comercios), usar zonas urbanas preconfiguradas
+    if (!gridZonas || gridZonas.length === 0) {
+      gridZonas = this.getZonasPreconfiguradasSantiago();
+    }
+
+    // Filtrar por códigos seleccionados si se especificaron
+    if (codigosFiltrados && codigosFiltrados.length > 0) {
+      const setCodigos = new Set(codigosFiltrados.map((c) => c.toUpperCase()));
+      gridZonas = gridZonas.filter((gz) => setCodigos.has(gz.codigo_zona.toUpperCase()));
+      
+      // Si por alguna razón los códigos no coinciden con las calculadas, crear zonas virtuales
+      if (gridZonas.length === 0) {
+        gridZonas = codigosFiltrados.map((code) => ({
+          codigo_zona: code.toUpperCase(),
+          sector: code.includes('SUR') ? 'SUR' : code.includes('NORTE') ? 'NORTE' : code.includes('ESTE') ? 'ESTE' : code.includes('OESTE') ? 'OESTE' : 'CENTRO',
+          numero_secuencial: 1,
+          centroide_lat: DEFAULT_CENTROID.lat,
+          centroide_lng: DEFAULT_CENTROID.lng,
+          total_comercios: 15,
+          comercios: [],
+          radio_estimado_metros: 800,
+        }));
+      }
     }
 
     // 2. Preparar registros para la tabla 'zonas'
     const registrosZonas = gridZonas.map((gz) => ({
-      id_zona: `zona_${tenantId.substring(0, 6)}_${gz.codigo_zona.toLowerCase()}_${Date.now()}`,
+      id_zona: `zona_${tenantId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 8)}_${gz.codigo_zona.toLowerCase().replace(/[^a-zA-Z0-9]/g, '')}_${Date.now()}`,
       tenant_id: tenantId,
       nombre_zona: gz.codigo_zona,
       activa: true,
@@ -250,7 +358,7 @@ export class GridClusteringService {
       tenantId,
       zonasAsignadasCount: registrosZonas.length,
       zonas: registrosZonas,
-      message: `Se asignaron exitosamente ${registrosZonas.length} zonas alfa-numéricas (${gridZonas.map((z) => z.codigo_zona).join(', ')}) al tenant '${tenantId}'.`,
+      message: `Se asignaron exitosamente ${registrosZonas.length} zonas (${gridZonas.map((z) => z.codigo_zona).join(', ')}) a la distribuidora.`,
     };
   }
 

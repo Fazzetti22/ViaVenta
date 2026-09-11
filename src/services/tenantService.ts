@@ -2,6 +2,7 @@ import { Empresa, Usuario } from '../types/auth';
 import { TenantWithDetails } from '../types/admin';
 import { supabase } from './supabaseClient';
 import { gridClusteringService } from './gridClusteringService';
+import { supervisorService } from './supervisorService';
 
 const STORAGE_KEY_TENANTS = 'saas_ruteo_tenants_registry_v1';
 const STORAGE_KEY_SUPERVISORS = 'saas_ruteo_supervisors_registry_v1';
@@ -242,7 +243,10 @@ export class TenantService {
     };
   }
 
-  public async asignarZonasGrid(tenantId: string): Promise<{
+  public async asignarZonasGrid(
+    tenantId: string,
+    codigosZonas?: string[]
+  ): Promise<{
     success: boolean;
     zonasAsignadasCount: number;
     nombresZonas: string[];
@@ -255,12 +259,16 @@ export class TenantService {
         success: false,
         zonasAsignadasCount: 0,
         nombresZonas: [],
-        message: 'Tenant no encontrado.',
+        message: 'Distribuidora no encontrada.',
       };
     }
 
     // Ejecutar clonación/asignación mediante GridClusteringService
-    const result = await gridClusteringService.asignarZonasMasterATenant(tenantId);
+    const result = await gridClusteringService.asignarZonasMasterATenant(
+      tenantId,
+      undefined,
+      codigosZonas
+    );
     if (!result.success) {
       return {
         success: false,
@@ -274,6 +282,19 @@ export class TenantService {
     list[index].total_zonas = nombresZonas.length;
     list[index].zonas_asignadas = nombresZonas;
     this.saveLocalTenants(list);
+
+    // Sincronizar de forma inmediata con el panel del supervisor del tenant
+    try {
+      await supervisorService.sincronizarZonasTenant(
+        tenantId,
+        result.zonas.map((z) => ({
+          codigo_zona: z.nombre_zona,
+          nombre_comercial: `Zona ${z.nombre_zona}`,
+        }))
+      );
+    } catch (e) {
+      console.warn('Advertencia sincronizando con supervisorService:', e);
+    }
 
     return {
       success: true,
