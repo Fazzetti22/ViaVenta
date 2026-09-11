@@ -31,7 +31,9 @@ import {
   Check,
   LogOut,
   ArrowLeft,
-  Package
+  Package,
+  Crosshair,
+  Building2
 } from 'lucide-react';
 import { useRouter } from '../router';
 import L from 'leaflet';
@@ -121,6 +123,20 @@ export const VendedorPwaMobile: React.FC = () => {
   const [ticketGenerado, setTicketGenerado] = useState<TicketCompraPayload | null>(null);
   const [telefonoClienteInput, setTelefonoClienteInput] = useState('');
   const [whatsappEnviado, setWhatsappEnviado] = useState(false);
+
+  // Estados para Alta de Nuevo Comercio en Calle (Preventista)
+  const [modalAltaComercio, setModalAltaComercio] = useState(false);
+  const [nuevoNombre, setNuevoNombre] = useState('');
+  const [nuevoDireccion, setNuevoDireccion] = useState('');
+  const [nuevoCategoria, setNuevoCategoria] = useState<string>('convenience_store');
+  const [nuevoTelefono, setNuevoTelefono] = useState('');
+  const [nuevoContacto, setNuevoContacto] = useState('');
+  const [nuevoLat, setNuevoLat] = useState<string>('-27.8080');
+  const [nuevoLng, setNuevoLng] = useState<string>('-64.2610');
+  const [obteniendoGps, setObteniendoGps] = useState(false);
+  const [gpsObtenidoExito, setGpsObtenidoExito] = useState(false);
+  const [mensajeExitoAlta, setMensajeExitoAlta] = useState<string | null>(null);
+  const [errorAlta, setErrorAlta] = useState<string | null>(null);
 
   // Referencias para Leaflet Map
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -305,6 +321,105 @@ export const VendedorPwaMobile: React.FC = () => {
     setComercios(offlineStore.getComerciosRuta());
   };
 
+  // Manejador para capturar ubicación GPS del dispositivo móvil del vendedor
+  const handleCapturarGps = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setErrorAlta('La geolocalización no está soportada en este navegador.');
+      return;
+    }
+    setObteniendoGps(true);
+    setErrorAlta(null);
+    setGpsObtenidoExito(false);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setNuevoLat(pos.coords.latitude.toFixed(6));
+        setNuevoLng(pos.coords.longitude.toFixed(6));
+        setObteniendoGps(false);
+        setGpsObtenidoExito(true);
+      },
+      (err) => {
+        console.warn('Error GPS:', err);
+        // Si el usuario no dio permiso o está en un emulador, usar centroide actual del mapa
+        if (leafletMapRef.current) {
+          const center = leafletMapRef.current.getCenter();
+          setNuevoLat(center.lat.toFixed(6));
+          setNuevoLng(center.lng.toFixed(6));
+          setGpsObtenidoExito(true);
+        }
+        setObteniendoGps(false);
+        setErrorAlta('No se pudo acceder al GPS. Se utilizaron las coordenadas del centro del mapa.');
+      },
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
+    );
+  };
+
+  // Manejador para dar de alta el nuevo comercio y actualizar el mapa
+  const handleGuardarNuevoComercio = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorAlta(null);
+
+    if (!nuevoNombre.trim()) {
+      setErrorAlta('El nombre de la empresa o comercio es obligatorio.');
+      return;
+    }
+    if (!nuevoDireccion.trim()) {
+      setErrorAlta('La dirección o calle/altura es obligatoria.');
+      return;
+    }
+
+    const latNum = parseFloat(nuevoLat);
+    const lngNum = parseFloat(nuevoLng);
+
+    if (isNaN(latNum) || isNaN(lngNum)) {
+      setErrorAlta('Coordenadas geográficas inválidas.');
+      return;
+    }
+
+    // Dar de alta a través de offlineStore
+    const comercioAlta = offlineStore.agregarNuevoComercioRuta({
+      nombre: nuevoNombre.trim(),
+      direccion: nuevoDireccion.trim(),
+      telefono: nuevoTelefono.trim() || undefined,
+      categoria: nuevoCategoria,
+      latitud: latNum,
+      longitud: lngNum,
+      estado_visita: 'pendiente',
+    });
+
+    // Actualizar lista local
+    const listaActualizada = offlineStore.getComerciosRuta();
+    setComercios(listaActualizada);
+
+    // Cambiar a vista de mapa si estaba en lista para ver el punto recién creado
+    setVistaActiva('mapa');
+
+    // Seleccionar automáticamente el comercio creado
+    setComercioSeleccionado(comercioAlta);
+    setTelefonoClienteInput(comercioAlta.telefono || '');
+
+    // Centrar mapa suavemente en la nueva coordenada
+    if (leafletMapRef.current) {
+      setTimeout(() => {
+        leafletMapRef.current?.flyTo([latNum, lngNum], 16, { duration: 1 });
+      }, 150);
+    }
+
+    // Resetear formulario y cerrar modal
+    setNuevoNombre('');
+    setNuevoDireccion('');
+    setNuevoTelefono('');
+    setNuevoContacto('');
+    setGpsObtenidoExito(false);
+    setModalAltaComercio(false);
+
+    // Feedback visual
+    setMensajeExitoAlta(`¡Comercio "${comercioAlta.nombre}" agregado con éxito a tu mapa!`);
+    setTimeout(() => {
+      setMensajeExitoAlta(null);
+    }, 4500);
+  };
+
   // Filtro de productos
   const categoriasUnicas = ['Todas', ...Array.from(new Set(catalogo.map((p) => p.categoria)))];
   const productosFiltrados = catalogo.filter((prod) => {
@@ -406,46 +521,78 @@ export const VendedorPwaMobile: React.FC = () => {
         </div>
       </header>
 
-      {/* 2. SELECTOR DE VISTA (MAPA / LISTA) Y CONTADORES */}
-      <div className="bg-white border-b border-slate-200 px-3.5 py-2 flex items-center justify-between shrink-0 text-xs">
-        <div className="flex gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+      {/* 2. SELECTOR DE VISTA (MAPA / LISTA), ALTA DE COMERCIO Y CONTADORES */}
+      <div className="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between shrink-0 text-xs gap-2">
+        <div className="flex items-center gap-1.5">
+          <div className="flex gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+            <button
+              onClick={() => setVistaActiva('mapa')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all active:scale-95 cursor-pointer ${
+                vistaActiva === 'mapa'
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <MapPin className="w-3.5 h-3.5 text-blue-600" />
+              <span>Mapa</span>
+            </button>
+            <button
+              onClick={() => setVistaActiva('lista')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all active:scale-95 cursor-pointer ${
+                vistaActiva === 'lista'
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <List className="w-3.5 h-3.5 text-slate-600" />
+              <span>Lista ({comercios.length})</span>
+            </button>
+          </div>
+
+          {/* Botón Alta de Comercio en Calle */}
           <button
-            onClick={() => setVistaActiva('mapa')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all active:scale-95 cursor-pointer ${
-              vistaActiva === 'mapa'
-                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            onClick={() => {
+              if (leafletMapRef.current) {
+                const center = leafletMapRef.current.getCenter();
+                setNuevoLat(center.lat.toFixed(6));
+                setNuevoLng(center.lng.toFixed(6));
+              }
+              setModalAltaComercio(true);
+            }}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs active:scale-95 transition-all cursor-pointer"
+            title="Dar de alta un nuevo comercio en la ruta"
           >
-            <MapPin className="w-3.5 h-3.5 text-blue-600" />
-            <span>Mapa</span>
-          </button>
-          <button
-            onClick={() => setVistaActiva('lista')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all active:scale-95 cursor-pointer ${
-              vistaActiva === 'lista'
-                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <List className="w-3.5 h-3.5 text-slate-600" />
-            <span>Lista ({comercios.length})</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden xxs:inline">Alta</span>
           </button>
         </div>
 
         {/* Resumen de visitas con Tokens Oficiales ViaVenta */}
-        <div className="flex items-center gap-2.5 font-mono text-xs">
-          <span className="text-emerald-700 font-semibold flex items-center gap-1" title="Ventas realizadas">
+        <div className="flex items-center gap-2 font-mono text-xs shrink-0">
+          <span className="text-emerald-700 font-semibold flex items-center gap-0.5" title="Ventas realizadas">
             <CheckCircle2 className="w-3.5 h-3.5" /> {visitadosConVenta}
           </span>
-          <span className="text-red-600 font-semibold flex items-center gap-1" title="Sin venta">
+          <span className="text-red-600 font-semibold flex items-center gap-0.5" title="Sin venta">
             <XCircle className="w-3.5 h-3.5" /> {visitadosSinVenta}
           </span>
-          <span className="text-amber-700 font-semibold flex items-center gap-1" title="Pendientes">
+          <span className="text-amber-700 font-semibold flex items-center gap-0.5" title="Pendientes">
             <Clock className="w-3.5 h-3.5" /> {pendientes}
           </span>
         </div>
       </div>
+
+      {/* TOAST DE FEEDBACK TRAS ALTA EXITOSA */}
+      {mensajeExitoAlta && (
+        <div className="absolute top-12 inset-x-3 z-40 bg-emerald-600 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl shadow-lg flex items-center justify-between gap-2 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{mensajeExitoAlta}</span>
+          </div>
+          <button onClick={() => setMensajeExitoAlta(null)} className="text-white/80 hover:text-white p-0.5">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* 3. CONTENIDO PRINCIPAL: MAPA LEAFLET O LISTA */}
       <div className="flex-1 relative overflow-hidden">
@@ -472,11 +619,53 @@ export const VendedorPwaMobile: React.FC = () => {
               <span>Sin venta / Cerrado</span>
             </div>
           </div>
+
+          {/* BOTÓN FLOTANTE (FAB) PARA DAR DE ALTA COMERCIO EN CALLE */}
+          {!comercioSeleccionado && (
+            <div className="absolute right-3.5 bottom-5 z-[400]">
+              <button
+                onClick={() => {
+                  if (leafletMapRef.current) {
+                    const center = leafletMapRef.current.getCenter();
+                    setNuevoLat(center.lat.toFixed(6));
+                    setNuevoLng(center.lng.toFixed(6));
+                  }
+                  setModalAltaComercio(true);
+                }}
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-lg ring-2 ring-white transition-all active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Alta Comercio</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* VISTA LISTA DE COMERCIOS */}
         {vistaActiva === 'lista' && (
           <div className="h-full overflow-y-auto p-4 space-y-2.5 pb-24 bg-slate-50">
+            {/* Banner de Alta Rápida de Comercio */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between gap-2 shadow-xs">
+              <div>
+                <h4 className="text-xs font-bold text-blue-950">¿Encontraste un local no registrado?</h4>
+                <p className="text-[11px] text-blue-800 mt-0.5">Dalo de alta para que aparezca en el mapa y tomar pedidos.</p>
+              </div>
+              <button
+                onClick={() => {
+                  if (leafletMapRef.current) {
+                    const center = leafletMapRef.current.getCenter();
+                    setNuevoLat(center.lat.toFixed(6));
+                    setNuevoLng(center.lng.toFixed(6));
+                  }
+                  setModalAltaComercio(true);
+                }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shrink-0 active:scale-95 transition-all cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Alta</span>
+              </button>
+            </div>
+
             {comercios.map((comercio, idx) => (
               <div
                 key={comercio.id_comercio}
@@ -1004,6 +1193,202 @@ export const VendedorPwaMobile: React.FC = () => {
             >
               Continuar con la Ruta
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 9. MODAL ALTA DE NUEVO COMERCIO EN CALLE (PREVENTISTA) */}
+      {modalAltaComercio && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom-6 duration-200">
+            {/* Header del Modal */}
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Dar de Alta Comercio</h3>
+                  <p className="text-[11px] text-slate-500">Registra un local no tomado en el barrido</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setModalAltaComercio(false);
+                  setErrorAlta(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Cuerpo del Formulario */}
+            <form onSubmit={handleGuardarNuevoComercio} className="p-5 overflow-y-auto space-y-4 flex-1">
+              {errorAlta && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{errorAlta}</span>
+                </div>
+              )}
+
+              {/* Nombre de la Empresa / Comercio */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 mb-1">
+                  Nombre del Comercio o Razón Social <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Despensa San Martín, Supermercado Norte..."
+                  value={nuevoNombre}
+                  onChange={(e) => setNuevoNombre(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 bg-white"
+                />
+              </div>
+
+              {/* Rubro Comercial */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 mb-1">
+                  Rubro / Categoría <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={nuevoCategoria}
+                  onChange={(e) => setNuevoCategoria(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 bg-white"
+                >
+                  <option value="convenience_store">Almacén / Despensa / Kiosco / Minimercado</option>
+                  <option value="grocery_or_supermarket">Supermercado / Autoservicio / Mayorista</option>
+                  <option value="pharmacy">Farmacia / Droguería</option>
+                  <option value="hardware_store">Ferretería / Bulonera / Pinturería</option>
+                  <option value="construction_store">Corralón / Materiales de Construcción</option>
+                  <option value="store">Distribuidora / Comercio Minorista General</option>
+                </select>
+              </div>
+
+              {/* Dirección Física */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 mb-1">
+                  Dirección o Calle y Número <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Av. Belgrano Sur 1520, Barrio Centro"
+                  value={nuevoDireccion}
+                  onChange={(e) => setNuevoDireccion(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 bg-white"
+                />
+              </div>
+
+              {/* Teléfono / WhatsApp y Contacto */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-800 mb-1">
+                    WhatsApp / Teléfono
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="Ej: 3854123456"
+                    value={nuevoTelefono}
+                    onChange={(e) => setNuevoTelefono(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-800 mb-1">
+                    Contacto / Encargado
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Juan (Titular)"
+                    value={nuevoContacto}
+                    onChange={(e) => setNuevoContacto(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Localización Geográfica GPS para el Mapa */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Crosshair className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Ubicación en el Mapa</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCapturarGps}
+                    disabled={obteniendoGps}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200 transition-colors disabled:opacity-50"
+                  >
+                    {obteniendoGps ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>Capturando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Navigation className="w-3 h-3" />
+                        <span>Obtener mi GPS</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {gpsObtenidoExito && (
+                  <p className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Coordenadas GPS fijadas con éxito</span>
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                  <div>
+                    <span className="text-slate-500 block mb-0.5">Latitud:</span>
+                    <input
+                      type="text"
+                      value={nuevoLat}
+                      onChange={(e) => setNuevoLat(e.target.value)}
+                      className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block mb-0.5">Longitud:</span>
+                    <input
+                      type="text"
+                      value={nuevoLng}
+                      onChange={(e) => setNuevoLng(e.target.value)}
+                      className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-slate-800"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500 leading-tight">
+                  Al confirmar, este comercio se ubicará de inmediato con un marcador en tu mapa interactivo.
+                </p>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalAltaComercio(false);
+                    setErrorAlta(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition-all active:scale-[0.99] flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Dar de Alta en Mapa</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

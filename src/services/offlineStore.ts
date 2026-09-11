@@ -171,6 +171,7 @@ const KEYS = {
   CATALOGO: `${KEY_PREFIX}catalogo_productos`,
   PEDIDOS_PENDIENTES: `${KEY_PREFIX}pedidos_pendientes`,
   VISITAS_PENDIENTES: `${KEY_PREFIX}visitas_pendientes`,
+  COMERCIOS_PENDIENTES: `${KEY_PREFIX}comercios_pendientes_alta`,
   LAST_SYNC: `${KEY_PREFIX}last_sync_timestamp`,
 };
 
@@ -272,6 +273,63 @@ export class OfflineStoreService {
 
   public guardarComerciosRuta(comercios: ComercioRuta[]) {
     localStorage.setItem(KEYS.COMERCIOS, JSON.stringify(comercios));
+  }
+
+  /**
+   * Permite al vendedor dar de alta un nuevo comercio en calle (PWA móvil)
+   * que no haya sido indexado en el barrido previo.
+   * Se añade inmediatamente a la ruta de trabajo local y se encola para
+   * persistirse en la base de datos central (comercios_master).
+   */
+  public agregarNuevoComercioRuta(
+    nuevo: Omit<ComercioRuta, 'id_comercio' | 'estado_visita'> & {
+      id_comercio?: string;
+      estado_visita?: ComercioRuta['estado_visita'];
+    }
+  ): ComercioRuta {
+    const comercioCompleto: ComercioRuta = {
+      ...nuevo,
+      id_comercio: nuevo.id_comercio || `comm_alta_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      estado_visita: nuevo.estado_visita || 'pendiente',
+    };
+
+    const lista = this.getComerciosRuta();
+    lista.push(comercioCompleto);
+    this.guardarComerciosRuta(lista);
+
+    // Encolar para sincronización en la base de datos
+    const pendientesRaw = localStorage.getItem(KEYS.COMERCIOS_PENDIENTES);
+    const pendientes: ComercioRuta[] = pendientesRaw ? JSON.parse(pendientesRaw) : [];
+    pendientes.push(comercioCompleto);
+    localStorage.setItem(KEYS.COMERCIOS_PENDIENTES, JSON.stringify(pendientes));
+
+    // También agregar al catálogo máster local para que esté disponible en toda la plataforma
+    try {
+      const rawMaster = localStorage.getItem('saas_ruteo_comercios_master_v1');
+      const masterList = rawMaster ? JSON.parse(rawMaster) : [];
+      masterList.push({
+        id_comercio: comercioCompleto.id_comercio,
+        google_place_id: `manual_pwa_${comercioCompleto.id_comercio}`,
+        nombre: comercioCompleto.nombre,
+        categoria: comercioCompleto.categoria || 'store',
+        latitud: comercioCompleto.latitud,
+        longitud: comercioCompleto.longitud,
+        direccion: comercioCompleto.direccion,
+        telefono: comercioCompleto.telefono,
+      });
+      localStorage.setItem('saas_ruteo_comercios_master_v1', JSON.stringify(masterList));
+    } catch {
+      // noop
+    }
+
+    this.notifyStatus();
+
+    // Intentar sincronización inmediata si está online
+    if (this.isOnline && !this.isSyncing) {
+      setTimeout(() => this.syncNow(), 200);
+    }
+
+    return comercioCompleto;
   }
 
   public actualizarEstadoComercio(
@@ -460,6 +518,29 @@ export class OfflineStoreService {
         localStorage.setItem(KEYS.VISITAS_PENDIENTES, JSON.stringify([]));
       }
 
+      // 3. Subir comercios dados de alta en la calle a la base central de datos (comercios_master)
+      const comerciosPendientesRaw = localStorage.getItem(KEYS.COMERCIOS_PENDIENTES);
+      const comerciosPendientes: ComercioRuta[] = comerciosPendientesRaw ? JSON.parse(comerciosPendientesRaw) : [];
+      if (comerciosPendientes.length > 0) {
+        for (const comm of comerciosPendientes) {
+          try {
+            await supabase.from('comercios_master').insert([
+              {
+                id_comercio: comm.id_comercio,
+                google_place_id: `manual_pwa_${comm.id_comercio}`,
+                nombre: comm.nombre,
+                categoria: comm.categoria || 'store',
+                latitud: comm.latitud,
+                longitud: comm.longitud,
+              }
+            ]);
+          } catch {
+            // Continúa localmente
+          }
+        }
+        localStorage.setItem(KEYS.COMERCIOS_PENDIENTES, JSON.stringify([]));
+      }
+
       localStorage.setItem(KEYS.LAST_SYNC, new Date().toISOString());
     } catch (err: any) {
       errorMessage = err.message || 'Error durante la sincronización remota';
@@ -481,9 +562,11 @@ export class OfflineStoreService {
   public getStatus(): SyncStatus {
     const pedidos = this.getPedidosPendientes();
     const visitas = this.getVisitasPendientes();
+    const comerciosPendientesRaw = typeof localStorage !== 'undefined' ? localStorage.getItem(KEYS.COMERCIOS_PENDIENTES) : null;
+    const comerciosPendientesCount = comerciosPendientesRaw ? JSON.parse(comerciosPendientesRaw).length : 0;
     return {
       isOnline: this.isOnline,
-      pendingCount: pedidos.length + visitas.length,
+      pendingCount: pedidos.length + visitas.length + comerciosPendientesCount,
       isSyncing: this.isSyncing,
       lastSyncTime: typeof localStorage !== 'undefined' ? localStorage.getItem(KEYS.LAST_SYNC) : null,
       lastError: null,
